@@ -35,7 +35,7 @@ cd sre-toolkit
 
 ## 🗂️ Project Structure
 ```bash
-sre-toolkit/
+devops-toolkit/
 ├── README.md                 # Project homepage
 ├── README-zh.md             # Chinese documentation
 ├── LICENSE                  # License file
