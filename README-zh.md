@@ -1,9 +1,9 @@
 # devops-toolkit
 🛠️ SRE/DevOps 工程师必备工具箱 - 包含监控、自动化、故障排查和应急响应工具集
 
-[![GitHub stars](https://img.shields.io/github/stars/sunyifei83/sre-toolkit)](https://github.com/sunyifei83/sre-toolkit/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/sunyifei83/sre-toolkit)](https://github.com/sunyifei83/sre-toolkit/network)
-[![GitHub issues](https://img.shields.io/github/issues/sunyifei83/sre-toolkit)](https://github.com/sunyifei83/sre-toolkit/issues)
+[![GitHub stars](https://img.shields.io/github/stars/sunyifei83/devops-toolkit)](https://github.com/sunyifei83/devops-toolkit/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/sunyifei83/devops-toolkit)](https://github.com/sunyifei83/devops-toolkit/network)
+[![GitHub issues](https://img.shields.io/github/issues/sunyifei83/devops-toolkit)](https://github.com/sunyifei83/devops-toolkit/issues)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 一个为站点可靠性工程师、DevOps专业人员和系统管理员打造的综合工具包。
@@ -22,8 +22,8 @@
 ## 🚀 快速开始
 ```shell
 # 克隆仓库
-git clone https://github.com/sunyifei83/sre-toolkit.git
-cd sre-toolkit
+git clone https://github.com/sunyifei83/devops-toolkit.git
+cd devops-toolkit
 ```
 
 ## 📚 文档
@@ -113,7 +113,7 @@ devops-toolkit/
 * 事件响应工具
 
 ## 🌟 星标历史
-[![Star History Chart](https://api.star-history.com/svg?repos=sunyifei83/sre-toolkit&type=Date)](https://www.star-history.com/#sunyifei83/sre-toolkit&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=sunyifei83/devops-toolkit&type=Date)](https://www.star-history.com/#sunyifei83/devops-toolkit&Date)
 
 ## 📄 许可证
 本项目采用 [MIT 许可证](LICENSE) - 详情请参阅 LICENSE 文件。

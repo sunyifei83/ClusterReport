@@ -1,9 +1,9 @@
 # devops-toolkit 
 🛠️ Essential toolkit for SRE/DevOps engineers - monitoring, automation, troubleshooting, and incident response tools
 
-[![GitHub stars](https://img.shields.io/github/stars/sunyifei83/sre-toolkit)](https://github.com/sunyifei83/sre-toolkit/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/sunyifei83/sre-toolkit)](https://github.com/sunyifei83/sre-toolkit/network)
-[![GitHub issues](https://img.shields.io/github/issues/sunyifei83/sre-toolkit)](https://github.com/sunyifei83/sre-toolkit/issues)
+[![GitHub stars](https://img.shields.io/github/stars/sunyifei83/devops-toolkit)](https://github.com/sunyifei83/devops-toolkit/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/sunyifei83/devops-toolkit)](https://github.com/sunyifei83/devops-toolkit/network)
+[![GitHub issues](https://img.shields.io/github/issues/sunyifei83/devops-toolkit)](https://github.com/sunyifei83/devops-toolkit/issues)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A comprehensive toolkit for Site Reliability Engineers, DevOps professionals, and System Administrators.
@@ -22,8 +22,8 @@ A comprehensive toolkit for Site Reliability Engineers, DevOps professionals, an
 ## 🚀 Quick Start
 ```shell
 # Clone the repository
-git clone https://github.com/sunyifei83/sre-toolkit.git
-cd sre-toolkit
+git clone https://github.com/sunyifei83/devops-toolkit.git
+cd devops-toolkit
 ```
 
 ## 📚 Documentation
@@ -113,7 +113,7 @@ We welcome contributions! Please see our Contributing Guide for details
 * Incident response tools
 
 ## 🌟 Star History
-[![Star History Chart](https://api.star-history.com/svg?repos=sunyifei83/sre-toolkit&type=Date)](https://www.star-history.com/#sunyifei83/sre-toolkit&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=sunyifei83/devops-toolkit&type=Date)](https://www.star-history.com/#sunyifei83/devops-toolkit&Date)
 
 ## 📄 License
 This project is licensed under the [MIT License](LICENSE) - see the LICENSE file for details.
