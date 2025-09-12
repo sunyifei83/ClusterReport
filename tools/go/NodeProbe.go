@@ -1,8 +1,14 @@
 /*
-v1版本暂时只支持本机执行采集cpu内存等基础信息，不支持其他节点远程执行
-TODO: 1.支持其他节点远程执行 2.支持节点硬件基准测试并输出结果(cpu/内存/磁盘/网络)
+NodeProbe - Linux服务器节点配置信息收集工具
+全面采集服务器硬件配置、系统状态和软件环境信息，支持自动优化系统设置
 Author: sunyifei@qiniu.com
 Version: 1.0.0
+项目: https://github.com/sunyifei83/devops-toolkit
+
+TODO:
+1. 支持远程节点信息采集
+2. 支持节点硬件基准测试（CPU/内存/磁盘/网络）
+3. 支持JSON/YAML格式输出
 */
 package main
 
@@ -701,14 +707,18 @@ func truncateString(s string, maxLen int) string {
 }
 
 func main() {
+	// 打印工具标识
+	fmt.Println("NodeProbe v1.0.0 - Linux节点配置探测工具")
+	fmt.Println("=" + strings.Repeat("=", 65))
+
 	// 检查是否以root权限运行
 	if os.Geteuid() != 0 {
 		fmt.Println("⚠️  某些硬件信息需要root权限才能获取完整数据")
-		fmt.Println("建议使用: sudo ./hwinfo")
+		fmt.Println("建议使用: sudo nodeprobe")
 		fmt.Println()
 	}
 
-	fmt.Println("正在收集硬件信息...")
+	fmt.Println("正在探测节点配置信息...")
 
 	info := ServerInfo{
 		Hostname:      getHostname(),
@@ -727,4 +737,6 @@ func main() {
 
 	fmt.Print("\033[2J\033[H") // 清屏
 	printServerInfo(info)
+
+	fmt.Println("\n由 NodeProbe 生成 | https://github.com/sunyifei83/devops-toolkit")
 }
