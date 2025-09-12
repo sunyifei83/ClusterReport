@@ -328,17 +328,313 @@ diff baseline_config.txt current_config.txt
 
 ## 与PerfSnap配合使用
 
-NodeProbe和PerfSnap是配套的服务器管理工具：
+NodeProbe和PerfSnap是配套的服务器管理工具，共同构成完整的服务器状态分析解决方案：
 
-| 工具 | 定位 | 数据类型 | 使用场景 |
-|------|------|---------|----------|
-| NodeProbe | 配置探测 | 静态信息 | 资产管理、配置审计 |
-| PerfSnap | 性能分析 | 动态数据 | 性能监控、故障诊断 |
+| 工具 | 定位 | 数据类型 | 使用场景 | 执行频率 |
+|------|------|---------|----------|----------|
+| NodeProbe | 配置探测 | 静态信息 | 资产管理、配置审计、环境准备 | 低频（配置变更时） |
+| PerfSnap | 性能分析 | 动态数据 | 性能监控、故障诊断、负载分析 | 高频（实时监控） |
 
 ### 组合使用示例
 
+#### 1. 新服务器上线检查
+
 ```bash
-# 完整的服务器检查
-echo "=== 配置信息 ===" > server_check.txt
-sudo nodeprobe >> server_check.txt
-echo -e "\n
+#!/bin/bash
+# 新服务器完整检查脚本
+
+echo "========== 服务器上线检查 =========="
+echo "时间: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "主机: $(hostname)"
+echo ""
+
+# Step 1: 收集硬件配置
+echo ">>> 1. 检查硬件配置和系统设置..."
+sudo nodeprobe > nodeprobe_$(hostname)_$(date +%Y%m%d).txt
+echo "配置信息已保存"
+
+# Step 2: 检查性能基线
+echo ">>> 2. 建立性能基线..."
+sudo perfsnap > perfsnap_baseline_$(hostname)_$(date +%Y%m%d).txt
+echo "性能基线已建立"
+
+# Step 3: 简单压力测试后的性能检查
+echo ">>> 3. 执行压力测试..."
+stress --cpu 4 --timeout 30s 2>/dev/null || echo "跳过压力测试"
+
+echo ">>> 4. 压力测试后性能检查..."
+sudo perfsnap > perfsnap_stress_$(hostname)_$(date +%Y%m%d).txt
+
+echo ""
+echo "检查完成！生成的报告文件："
+ls -lh *.txt | tail -3
+```
+
+#### 2. 故障诊断流程
+
+```bash
+#!/bin/bash
+# 故障诊断组合脚本
+
+REPORT_DIR="/var/log/diagnostics/$(date +%Y%m%d_%H%M%S)"
+mkdir -p $REPORT_DIR
+
+echo "开始故障诊断..."
+
+# 1. 先检查配置是否有变更
+echo "[1/4] 检查系统配置..."
+sudo nodeprobe > $REPORT_DIR/01_nodeprobe.txt
+
+# 2. 获取当前性能快照
+echo "[2/4] 获取性能快照..."
+sudo perfsnap > $REPORT_DIR/02_perfsnap_current.txt
+
+# 3. 持续监控性能（1分钟）
+echo "[3/4] 开始实时监控（60秒）..."
+sudo perfsnap -m 2 60 > $REPORT_DIR/03_perfsnap_monitor.txt
+
+# 4. 收集系统日志
+echo "[4/4] 收集系统日志..."
+tail -n 1000 /var/log/messages > $REPORT_DIR/04_system_logs.txt 2>/dev/null
+dmesg -T | tail -n 500 > $REPORT_DIR/05_dmesg.txt
+
+# 生成诊断摘要
+cat > $REPORT_DIR/00_summary.txt << EOF
+故障诊断报告
+生成时间: $(date)
+主机名: $(hostname)
+
+文件列表:
+- 01_nodeprobe.txt: 系统配置信息
+- 02_perfsnap_current.txt: 当前性能状态
+- 03_perfsnap_monitor.txt: 60秒性能监控
+- 04_system_logs.txt: 系统日志
+- 05_dmesg.txt: 内核日志
+
+快速检查项:
+$(grep "CPU性能模式" $REPORT_DIR/01_nodeprobe.txt)
+$(grep "系统负载" $REPORT_DIR/02_perfsnap_current.txt | head -1)
+$(grep "内存使用率" $REPORT_DIR/02_perfsnap_current.txt | head -1)
+EOF
+
+echo ""
+echo "诊断完成！报告保存在: $REPORT_DIR"
+echo "查看摘要: cat $REPORT_DIR/00_summary.txt"
+```
+
+#### 3. 日常巡检脚本
+
+```bash
+#!/bin/bash
+# daily_inspection.sh - 日常巡检脚本
+
+INSPECTION_LOG="/var/log/inspection/$(date +%Y%m%d).log"
+mkdir -p $(dirname $INSPECTION_LOG)
+
+{
+    echo "====== 日常巡检报告 ======"
+    echo "日期: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo ""
+    
+    # 基础配置检查（每天一次）
+    echo "=== 配置信息 ==="
+    sudo nodeprobe | grep -E "主机名:|CPU核心数:|总内存:|磁盘数量:|网络接口数:"
+    
+    echo ""
+    echo "=== 性能状态 ==="
+    sudo perfsnap | grep -E "系统负载:|CPU使用率:|内存:|磁盘 .* 利用率|TCP连接:"
+    
+    echo ""
+    echo "=== 异常检查 ==="
+    # 检查是否有性能问题
+    sudo perfsnap | grep "⚠️" || echo "✅ 无性能告警"
+    
+} | tee $INSPECTION_LOG
+
+# 发送邮件通知（如果配置了邮件）
+# mail -s "服务器巡检报告 $(hostname) $(date +%Y%m%d)" admin@example.com < $INSPECTION_LOG
+```
+
+#### 4. 性能对比分析
+
+```bash
+#!/bin/bash
+# 性能变化对比分析
+
+echo "=== 配置与性能对比分析 ==="
+
+# 收集当前状态
+TEMP_DIR=$(mktemp -d)
+sudo nodeprobe > $TEMP_DIR/config_now.txt
+sudo perfsnap > $TEMP_DIR/perf_now.txt
+
+# 与基线对比（假设有基线文件）
+BASELINE_DIR="/opt/baseline"
+
+if [ -f "$BASELINE_DIR/nodeprobe_baseline.txt" ]; then
+    echo ">>> 配置变更："
+    diff -u $BASELINE_DIR/nodeprobe_baseline.txt $TEMP_DIR/config_now.txt | \
+        grep "^[+-]" | grep -v "^[+-][+-][+-]" | head -20
+else
+    echo "未找到配置基线文件"
+fi
+
+if [ -f "$BASELINE_DIR/perfsnap_baseline.txt" ]; then
+    echo ""
+    echo ">>> 性能指标对比："
+    # 提取关键指标进行对比
+    for metric in "系统负载" "CPU使用率" "内存" "磁盘.*利用率"; do
+        echo "- $metric:"
+        echo "  基线: $(grep "$metric" $BASELINE_DIR/perfsnap_baseline.txt | head -1)"
+        echo "  当前: $(grep "$metric" $TEMP_DIR/perf_now.txt | head -1)"
+    done
+else
+    echo "未找到性能基线文件"
+fi
+
+# 清理临时文件
+rm -rf $TEMP_DIR
+```
+
+#### 5. 批量服务器检查
+
+```bash
+#!/bin/bash
+# 批量检查多台服务器
+
+SERVERS="server1 server2 server3 server4"
+REPORT_DIR="cluster_report_$(date +%Y%m%d_%H%M%S)"
+mkdir -p $REPORT_DIR
+
+echo "开始批量检查服务器集群..."
+
+for server in $SERVERS; do
+    echo ">>> 检查 $server ..."
+    
+    # 并行执行配置和性能检查
+    ssh root@$server "sudo nodeprobe" > $REPORT_DIR/${server}_nodeprobe.txt 2>&1 &
+    ssh root@$server "sudo perfsnap" > $REPORT_DIR/${server}_perfsnap.txt 2>&1 &
+done
+
+# 等待所有任务完成
+wait
+
+# 生成汇总报告
+cat > $REPORT_DIR/00_cluster_summary.md << EOF
+# 集群检查报告
+
+生成时间: $(date)
+
+## 服务器列表
+$(for s in $SERVERS; do echo "- $s"; done)
+
+## 配置汇总
+
+| 服务器 | CPU核心 | 内存 | 磁盘数 | 状态 |
+|--------|---------|------|--------|------|
+$(for server in $SERVERS; do
+    if [ -f "$REPORT_DIR/${server}_nodeprobe.txt" ]; then
+        cpu=$(grep "CPU核心数:" $REPORT_DIR/${server}_nodeprobe.txt | awk '{print $2}')
+        mem=$(grep "总内存:" $REPORT_DIR/${server}_nodeprobe.txt | awk '{print $2, $3}')
+        disk=$(grep "磁盘数量:" $REPORT_DIR/${server}_nodeprobe.txt | awk -F'总计:' '{print $2}' | awk '{print $1}')
+        echo "| $server | $cpu | $mem | $disk | ✅ |"
+    else
+        echo "| $server | - | - | - | ❌ |"
+    fi
+done)
+
+## 性能状态
+
+| 服务器 | 负载 | CPU使用 | 内存使用 | 告警 |
+|--------|------|---------|----------|------|
+$(for server in $SERVERS; do
+    if [ -f "$REPORT_DIR/${server}_perfsnap.txt" ]; then
+        load=$(grep "系统负载:" $REPORT_DIR/${server}_perfsnap.txt | head -1 | awk -F': ' '{print $2}' | awk '{print $1}')
+        cpu=$(grep "CPU使用率:" $REPORT_DIR/${server}_perfsnap.txt | grep -oE '[0-9]+%' | head -1)
+        mem=$(grep "内存:" $REPORT_DIR/${server}_perfsnap.txt | grep -oE '[0-9.]+%' | head -1)
+        alerts=$(grep -c "⚠️" $REPORT_DIR/${server}_perfsnap.txt)
+        echo "| $server | $load | $cpu | $mem | $alerts |"
+    else
+        echo "| $server | - | - | - | - |"
+    fi
+done)
+
+## 详细报告
+$(for server in $SERVERS; do
+    echo "- [$server NodeProbe]($REPORT_DIR/${server}_nodeprobe.txt)"
+    echo "- [$server PerfSnap]($REPORT_DIR/${server}_perfsnap.txt)"
+done)
+EOF
+
+echo ""
+echo "批量检查完成！"
+echo "查看汇总报告: cat $REPORT_DIR/00_cluster_summary.md"
+```
+
+#### 6. 自动化运维集成
+
+```bash
+#!/bin/bash
+# 集成到自动化运维流程
+
+# 添加到crontab的定时任务
+cat << 'EOF' > /etc/cron.d/server-inspection
+# 每天早上9点执行配置检查
+0 9 * * * root /usr/local/bin/nodeprobe > /var/log/nodeprobe/$(date +\%Y\%m\%d).log 2>&1
+
+# 每小时执行性能快照
+0 * * * * root /usr/local/bin/perfsnap > /var/log/perfsnap/$(date +\%Y\%m\%d_\%H).log 2>&1
+
+# 每周一生成周报
+0 10 * * 1 root /usr/local/bin/weekly_report.sh
+
+# 性能告警检查（每5分钟）
+*/5 * * * * root /usr/local/bin/perfsnap | grep -q "⚠️" && /usr/local/bin/send_alert.sh
+EOF
+
+# weekly_report.sh - 周报生成脚本
+cat << 'EOF' > /usr/local/bin/weekly_report.sh
+#!/bin/bash
+REPORT_FILE="/var/reports/weekly_$(date +%Y%W).html"
+
+{
+    echo "<html><head><title>服务器周报</title></head><body>"
+    echo "<h1>服务器运行周报</h1>"
+    echo "<p>生成时间: $(date)</p>"
+    
+    echo "<h2>1. 配置信息</h2>"
+    echo "<pre>"
+    sudo nodeprobe
+    echo "</pre>"
+    
+    echo "<h2>2. 本周性能趋势</h2>"
+    echo "<pre>"
+    for day in $(seq 0 6); do
+        date -d "$day days ago" +%Y%m%d
+        grep "系统负载\|CPU使用率\|内存" /var/log/perfsnap/$(date -d "$day days ago" +%Y%m%d)*.log | head -3
+        echo "---"
+    done
+    echo "</pre>"
+    
+    echo "<h2>3. 告警统计</h2>"
+    echo "<pre>"
+    grep -h "⚠️" /var/log/perfsnap/*.log | sort | uniq -c | sort -rn
+    echo "</pre>"
+    
+    echo "</body></html>"
+} > $REPORT_FILE
+
+# 发送周报
+# mail -s "$(hostname) 服务器周报" -a $REPORT_FILE admin@example.com < /dev/null
+EOF
+
+chmod +x /usr/local/bin/weekly_report.sh
+```
+
+### 使用场景对照表
+
+| 场景 | NodeProbe使用 | PerfSnap使用 | 组合价值 |
+|------|---------------|--------------|----------|
+| **新服务器验收** | ✅ 验证硬件配置是否符合采购要求 | ✅ 建立性能基线 | 完整的验收报告 |
+| **故障诊断** | ✅ 检查配置是否被修改 | ✅ 定位性能瓶颈 | 快速定位问题根源 |
+| **
