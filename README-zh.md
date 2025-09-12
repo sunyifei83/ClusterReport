@@ -48,10 +48,15 @@ devops-toolkit/
 │   ├── PULL_REQUEST_TEMPLATE.md
 │   └── workflows/
 │       └── ci.yml           # GitHub Actions
-├── docs/                    # 文档目录
+├── docs/                    # 文档目录和各层级目录对应,相应工具的说明文档统一更新
 │   ├── BestPractices.md
 │   ├── ToolsDocumentation.md
-│   └── UserGuide.md
+│   ├── UserGuide.md
+│   └── tools/
+│          ├── go
+│          │    └──xxx.md
+│          ├── shell
+│          └── python
 ├── scripts/                 # 脚本集合
 │   ├── monitoring/         # 监控相关
 │   │   ├── prometheus/
