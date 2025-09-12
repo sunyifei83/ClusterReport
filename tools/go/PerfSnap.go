@@ -1,12 +1,13 @@
 /*
-Linux服务器性能快速分析工具
-采集最近1分钟的系统性能数据，包括CPU、内存、磁盘、网络等指标
+PerfSnap - Linux服务器性能快照分析工具
+快速采集和分析系统性能数据，包括CPU、内存、磁盘、网络等关键指标
 Author: sunyifei83@gmail.com
 Version: 1.0.0
-Tips: LinuxHostLoad工具需要系统安装sysstat包（提供sar、mpstat、pidstat、iostat等命令）
+Tips: PerfSnap需要系统安装sysstat包（提供sar、mpstat、pidstat、iostat等命令）
 使用:
-1.go build
-2.chmod 700 LinuxHostLoad_v1  执行 ./LinuxHostLoad_v1
+1. go build -o perfsnap PerfSnap.go
+2. chmod +x perfsnap
+3. ./perfsnap 或 sudo ./perfsnap (推荐使用root权限)
 */
 package main
 
@@ -553,7 +554,7 @@ func collectPerformanceData() PerformanceData {
 // 打印性能报告
 func printPerformanceReport(data PerformanceData) {
 	fmt.Println("\n" + strings.Repeat("=", 80))
-	fmt.Println("                    Linux 系统性能快速分析报告")
+	fmt.Println("                    PerfSnap - 系统性能快照分析报告")
 	fmt.Println("                    " + time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Println(strings.Repeat("=", 80))
 
@@ -858,7 +859,7 @@ func main() {
 	// 检查是否以root权限运行（某些命令需要root权限）
 	if os.Geteuid() != 0 {
 		fmt.Println("⚠️  建议以root权限运行以获取完整的性能数据")
-		fmt.Println("   sudo " + os.Args[0])
+		fmt.Println("   sudo perfsnap")
 		fmt.Println()
 	}
 
@@ -885,15 +886,16 @@ func main() {
 			return
 
 		case "-h", "--help":
-			fmt.Println("Linux系统性能快速分析工具")
+			fmt.Println("PerfSnap - Linux系统性能快照分析工具")
 			fmt.Println("\n用法:")
-			fmt.Println("  " + os.Args[0] + "              - 生成一次性能分析报告")
-			fmt.Println("  " + os.Args[0] + " -m [间隔] [持续时间] - 实时监控模式")
-			fmt.Println("  " + os.Args[0] + " -h          - 显示帮助信息")
+			fmt.Println("  perfsnap              - 生成一次性能快照报告")
+			fmt.Println("  perfsnap -m [间隔] [持续时间] - 实时监控模式")
+			fmt.Println("  perfsnap -h          - 显示帮助信息")
 			fmt.Println("\n示例:")
-			fmt.Println("  " + os.Args[0] + "              - 生成性能报告")
-			fmt.Println("  " + os.Args[0] + " -m           - 实时监控(默认2秒间隔，60秒)")
-			fmt.Println("  " + os.Args[0] + " -m 5 120     - 每5秒刷新，持续120秒")
+			fmt.Println("  perfsnap              - 生成性能快照报告")
+			fmt.Println("  perfsnap -m           - 实时监控(默认2秒间隔，60秒)")
+			fmt.Println("  perfsnap -m 5 120     - 每5秒刷新，持续120秒")
+			fmt.Println("\n项目: https://github.com/sunyifei83/devops-toolkit")
 			return
 		}
 	}
