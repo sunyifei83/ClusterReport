@@ -1,5 +1,5 @@
-# devops-toolkit 
-🛠️ Essential toolkit for SRE/DevOps engineers - monitoring, automation, troubleshooting, and incident response tools
+# devops-toolkit
+🛠️ SRE/DevOps 工程师必备工具箱 - 包含监控、自动化、故障排查和应急响应工具集
 
 [![GitHub stars](https://img.shields.io/github/stars/sunyifei83/sre-toolkit)](https://github.com/sunyifei83/sre-toolkit/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/sunyifei83/sre-toolkit)](https://github.com/sunyifei83/sre-toolkit/network)
