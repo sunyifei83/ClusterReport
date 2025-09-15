@@ -2,7 +2,7 @@
 NodeProbe - Linux服务器节点配置信息收集工具
 全面采集服务器硬件配置、系统状态和软件环境信息，支持自动优化系统设置
 Author: sunyifei83@gmail.com
-Version: 1.1.0
+Version: 1.1.1
 项目: https://github.com/sunyifei83/devops-toolkit
 
 Features:
@@ -57,8 +57,13 @@ type CPUInfo struct {
 }
 
 type MemoryInfo struct {
-	TotalGB float64  `json:"total_gb" yaml:"total_gb"`
-	Slots   []string `json:"slots" yaml:"slots"`
+	TotalGB float64    `json:"total_gb" yaml:"total_gb"`
+	Slots   []SlotInfo `json:"slots" yaml:"slots"`
+}
+
+type SlotInfo struct {
+	Location string `json:"location" yaml:"location"`
+	Size     string `json:"size" yaml:"size"`
 }
 
 type DiskInfo struct {
@@ -314,13 +319,52 @@ func getMemoryInfo() MemoryInfo {
 	// 获取内存插槽信息
 	if output, err := execCommand("dmidecode", "-t", "17"); err == nil {
 		lines := strings.Split(output, "\n")
+		var currentSlot SlotInfo
+		var hasSize bool
+
 		for _, line := range lines {
-			if strings.Contains(line, "Size:") && !strings.Contains(line, "No Module") {
-				parts := strings.Fields(line)
-				if len(parts) >= 2 {
-					info.Slots = append(info.Slots, strings.Join(parts[1:], " "))
+			line = strings.TrimSpace(line)
+
+			// 检测新的内存模块开始
+			if strings.Contains(line, "Memory Device") {
+				// 如果前一个插槽有有效的内存，添加到列表
+				if hasSize && currentSlot.Size != "" {
+					info.Slots = append(info.Slots, currentSlot)
+				}
+				// 重置当前插槽信息
+				currentSlot = SlotInfo{}
+				hasSize = false
+			}
+
+			// 获取插槽位置
+			if strings.HasPrefix(line, "Locator:") && !strings.HasPrefix(line, "Bank Locator:") {
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) == 2 {
+					currentSlot.Location = strings.TrimSpace(parts[1])
 				}
 			}
+
+			// 获取内存大小
+			if strings.HasPrefix(line, "Size:") {
+				// 只收集有实际内存的插槽
+				if !strings.Contains(line, "No Module") &&
+					!strings.Contains(line, "None") &&
+					!strings.Contains(line, "Unknown") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						sizeInfo := strings.Join(parts[1:], " ")
+						if sizeInfo != "" && sizeInfo != "0" {
+							currentSlot.Size = sizeInfo
+							hasSize = true
+						}
+					}
+				}
+			}
+		}
+
+		// 添加最后一个插槽（如果有效）
+		if hasSize && currentSlot.Size != "" {
+			info.Slots = append(info.Slots, currentSlot)
 		}
 	}
 
@@ -332,15 +376,70 @@ func getDiskInfo() DiskInfo {
 	info := DiskInfo{}
 
 	// 获取系统盘挂载信息
-	if output, err := execCommand("df", "-h"); err == nil {
+	if output, err := execCommand("df", "-h", "/"); err == nil {
 		lines := strings.Split(output, "\n")
-		for _, line := range lines {
-			if strings.Contains(line, " / ") && !strings.Contains(line, "udev") &&
-				!strings.Contains(line, "tmpfs") && !strings.Contains(line, "/boot") {
+		// 跳过标题行
+		if len(lines) > 1 {
+			for i := 1; i < len(lines); i++ {
+				line := lines[i]
+				if line == "" {
+					continue
+				}
+
 				fields := strings.Fields(line)
-				if len(fields) >= 6 {
+				// df输出可能会换行，需要处理两种情况
+				// 正常情况: /dev/sda1 274G 123G 138G 48% /
+				// 换行情况: /dev/sda1
+				//           274G 123G 138G 48% /
+				if len(fields) >= 6 && fields[5] == "/" {
+					// 正常单行输出
 					info.SystemDisk = fmt.Sprintf("%s %s/%s (%s)",
-						fields[0], fields[3], fields[2], fields[5])
+						fields[0], fields[3], fields[2], fields[4])
+					break
+				} else if len(fields) == 1 && i+1 < len(lines) {
+					// 可能是设备名单独一行
+					nextLine := lines[i+1]
+					nextFields := strings.Fields(nextLine)
+					if len(nextFields) >= 5 && nextFields[4] == "/" {
+						info.SystemDisk = fmt.Sprintf("%s %s/%s (%s)",
+							fields[0], nextFields[2], nextFields[1], nextFields[3])
+						break
+					}
+				} else if len(fields) >= 5 && fields[4] == "/" {
+					// 没有设备名的情况（续行）
+					if i > 1 {
+						prevLine := lines[i-1]
+						prevFields := strings.Fields(prevLine)
+						if len(prevFields) == 1 {
+							info.SystemDisk = fmt.Sprintf("%s %s/%s (%s)",
+								prevFields[0], fields[2], fields[1], fields[3])
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 如果上面的方法没有找到，使用备用方法
+	if info.SystemDisk == "" {
+		if output, err := execCommand("df", "-h"); err == nil {
+			lines := strings.Split(output, "\n")
+			for _, line := range lines {
+				// 更宽松的匹配条件
+				if (strings.Contains(line, " /") || strings.HasSuffix(line, " /")) &&
+					!strings.Contains(line, "udev") &&
+					!strings.Contains(line, "tmpfs") &&
+					!strings.Contains(line, "overlay") &&
+					!strings.Contains(line, "/boot") &&
+					!strings.Contains(line, "/dev/shm") &&
+					!strings.Contains(line, "/run") {
+					fields := strings.Fields(line)
+					if len(fields) >= 6 {
+						info.SystemDisk = fmt.Sprintf("%s %s/%s (%s)",
+							fields[0], fields[3], fields[2], fields[4])
+						break
+					}
 				}
 			}
 		}
@@ -661,9 +760,19 @@ func printServerInfo(info ServerInfo) {
 	if len(info.Memory.Slots) > 0 {
 		slotInfo := fmt.Sprintf("%d个插槽已使用", len(info.Memory.Slots))
 		fmt.Printf("║ %s %s ║\n", padRight("内存插槽:", 20), padRight(slotInfo, 43))
-		for i, slot := range info.Memory.Slots {
-			slotLabel := fmt.Sprintf("  插槽%d:", i+1)
-			fmt.Printf("║ %s %s ║\n", padRight(slotLabel, 20), padRight(slot, 43))
+		// 只显示前10个插槽信息，避免输出过长
+		displaySlots := info.Memory.Slots
+		if len(displaySlots) > 10 {
+			displaySlots = displaySlots[:10]
+		}
+		for _, slot := range displaySlots {
+			slotLabel := fmt.Sprintf("  %s:", slot.Location)
+			fmt.Printf("║ %s %s ║\n", padRight(slotLabel, 20), padRight(slot.Size, 43))
+		}
+		// 如果插槽数量超过10个，显示省略信息
+		if len(info.Memory.Slots) > 10 {
+			fmt.Printf("║ %s %s ║\n", padRight("  ...", 20),
+				padRight(fmt.Sprintf("(共%d个插槽)", len(info.Memory.Slots)), 43))
 		}
 	}
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
@@ -804,7 +913,8 @@ func outputYAML(info ServerInfo) error {
 	if len(info.Memory.Slots) > 0 {
 		output.WriteString("  slots:\n")
 		for _, slot := range info.Memory.Slots {
-			output.WriteString(fmt.Sprintf("    - %s\n", slot))
+			output.WriteString(fmt.Sprintf("    - location: %s\n", slot.Location))
+			output.WriteString(fmt.Sprintf("      size: %s\n", slot.Size))
 		}
 	}
 	output.WriteString("\n")
@@ -862,7 +972,7 @@ func main() {
 	)
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "NodeProbe v1.1.0 - Linux节点配置探测工具\n\n")
+		fmt.Fprintf(os.Stderr, "NodeProbe v1.1.1 - Linux节点配置探测工具\n\n")
 		fmt.Fprintf(os.Stderr, "用法: %s [选项]\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "选项:\n")
 		flag.PrintDefaults()
@@ -877,7 +987,7 @@ func main() {
 
 	// 显示版本信息
 	if *showVersion {
-		fmt.Println("NodeProbe v1.1.0")
+		fmt.Println("NodeProbe v1.1.1")
 		os.Exit(0)
 	}
 
@@ -904,7 +1014,7 @@ func main() {
 
 	// 非静默模式且表格输出时显示提示信息
 	if !*quiet && *outputFormat == "table" && *outputFile == "" {
-		fmt.Println("NodeProbe v1.1.0 - Linux节点配置探测工具")
+		fmt.Println("NodeProbe v1.1.1 - Linux节点配置探测工具")
 		fmt.Println("=" + strings.Repeat("=", 65))
 
 		// 检查是否以root权限运行
@@ -930,7 +1040,7 @@ func main() {
 		Java:          getJavaInfo(),
 		KernelModules: checkAndLoadKernelModules(),
 		Timestamp:     time.Now().Format("2006-01-02 15:04:05"),
-		Version:       "1.1.0",
+		Version:       "1.1.1",
 	}
 
 	info.OS, info.Kernel = getOSInfo()

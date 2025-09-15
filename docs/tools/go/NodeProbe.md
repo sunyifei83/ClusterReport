@@ -4,7 +4,7 @@
 
 `NodeProbe` 是一个专业的Linux服务器节点配置信息收集工具，能够全面探测和采集服务器的硬件配置、系统状态、软件环境等关键信息。该工具不仅能够收集配置信息，还具备自动优化系统设置的能力，支持多种输出格式，是运维人员进行服务器管理、资产清点、故障排查的得力助手。
 
-**版本**: 1.1.0  
+**版本**: 1.1.1  
 **作者**: sunyifei83@gmail.com  
 **项目**: https://github.com/sunyifei83/devops-toolkit  
 **更新日期**: 2025-09-15
@@ -19,6 +19,7 @@
 - 🛡️ **内核检查**: 自动检测并加载必要的内核模块
 - 🌍 **UTF-8支持**: 完美处理中文字符，输出格式整齐美观
 - 💾 **文件导出**: 支持将结果导出到文件，便于自动化处理
+- 🎯 **精准硬件定位**: 内存插槽显示实际物理位置编号
 
 ## 主要功能模块
 
@@ -39,8 +40,11 @@
 
 ### 3. 内存配置
 - **总容量**: 系统总内存大小
-- **插槽信息**: 内存条数量和容量
-- **内存类型**: DDR3/DDR4等规格
+- **插槽信息**: 实际硬件插槽位置和容量
+  - 显示物理插槽编号（如 DIMM_A1, DIMM_B2）
+  - 只显示已安装内存的插槽
+  - 过滤空插槽信息
+- **智能统计**: 准确统计使用的插槽数量
 
 ### 4. 存储系统
 - **系统盘**: 根分区使用情况
@@ -87,10 +91,10 @@
 ```bash
 # 1. 克隆项目
 git clone https://github.com/sunyifei83/devops-toolkit.git
-cd devops-toolkit/tools/go
+cd devops-toolkit
 
-# 2. 编译NodeProbe
-go build -o nodeprobe NodeProbe.go
+# 2. 编译NodeProbe（注意：需要单独编译）
+go build -o nodeprobe tools/go/NodeProbe.go
 
 # 3. 设置执行权限
 chmod +x nodeprobe
@@ -99,8 +103,10 @@ chmod +x nodeprobe
 sudo mv nodeprobe /usr/local/bin/
 
 # 5. 验证安装
-nodeprobe
+nodeprobe -version
 ```
+
+### 注意事项
 
 ## 使用方法
 
@@ -195,7 +201,7 @@ sudo nodeprobe -format yaml -output config.yaml
 ### 表格格式输出
 
 ```
-NodeProbe v1.1.0 - Linux节点配置探测工具
+NodeProbe v1.1.1 - Linux节点配置探测工具
 ==================================================================
 
 正在探测节点配置信息...
@@ -215,10 +221,10 @@ NodeProbe v1.1.0 - Linux节点配置探测工具
 ╠════════════════════════════════════════════════════════════════╣
 ║ 总内存:              62.79 GB                                 ║
 ║ 内存插槽:            4个插槽已使用                            ║
-║   插槽1: 16384 MB                                            ║
-║   插槽2: 16384 MB                                            ║
-║   插槽3: 16384 MB                                            ║
-║   插槽4: 16384 MB                                            ║
+║   DIMM_A1:           16384 MB                                ║
+║   DIMM_A2:           16384 MB                                ║
+║   DIMM_B1:           16384 MB                                ║
+║   DIMM_B2:           16384 MB                                ║
 ╠════════════════════════════════════════════════════════════════╣
 ║ 系统盘:              /dev/sda1 45G/200G (23%)                ║
 ║ 磁盘数量:            总计: 5, 数据盘: 4                       ║
@@ -263,10 +269,10 @@ NodeProbe v1.1.0 - Linux节点配置探测工具
   "memory": {
     "total_gb": 62.79,
     "slots": [
-      "16384 MB",
-      "16384 MB",
-      "16384 MB",
-      "16384 MB"
+      {"location": "DIMM_A1", "size": "16384 MB"},
+      {"location": "DIMM_A2", "size": "16384 MB"},
+      {"location": "DIMM_B1", "size": "16384 MB"},
+      {"location": "DIMM_B2", "size": "16384 MB"}
     ]
   },
   "disks": {
@@ -324,7 +330,7 @@ timezone: Asia/Shanghai
 os: CentOS Linux 7.9.2009 (Core)
 kernel: 3.10.0-1160.71.1.el7.x86_64
 timestamp: 2025-01-15 12:00:00
-nodeprobe_version: 1.1.0
+nodeprobe_version: 1.1.1
 
 cpu:
   model: Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz
@@ -335,10 +341,14 @@ cpu:
 memory:
   total_gb: 62.79
   slots:
-    - 16384 MB
-    - 16384 MB
-    - 16384 MB
-    - 16384 MB
+    - location: DIMM_A1
+      size: 16384 MB
+    - location: DIMM_A2
+      size: 16384 MB
+    - location: DIMM_B1
+      size: 16384 MB
+    - location: DIMM_B2
+      size: 16384 MB
 
 disks:
   system_disk: /dev/sda1 45G/200G (23%)
@@ -412,12 +422,44 @@ NodeProbe会自动检测CPU调度器模式，并在root权限下自动优化：
 | 系统负载 | /proc/loadavg | 实时负载 |
 | 操作系统 | /etc/os-release | 发行版信息 |
 | 内核版本 | /proc/version | 内核信息 |
-| CPU信息 | /proc/cpuinfo | 处理器详情 |
+| CPU信息 | /proc/cpuinfo, lscpu | 处理器详情 |
+| CPU性能模式 | /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor | 调度器模式 |
 | 内存总量 | /proc/meminfo | 内存统计 |
-| 内存插槽 | dmidecode -t 17 | 需要root |
+| 内存插槽 | dmidecode -t 17 | 需要root，包含物理位置 |
 | 磁盘信息 | lsblk、df | 存储设备 |
 | 网络接口 | ip addr | 网络配置 |
 | 网卡速度 | ethtool | 可选工具 |
+| 时区信息 | timedatectl, /etc/timezone | 系统时区 |
+| Python信息 | python --version, which python | 多版本检测 |
+| Java信息 | java -version, JAVA_HOME | JDK/JRE信息 |
+| 内核模块 | lsmod, modprobe | 模块管理 |
+
+## 版本更新历史
+
+### v1.1.1 (2025-09-15)
+- 🔧 **优化内存插槽显示**
+  - 显示实际硬件插槽位置（DIMM_A1 等）而非递增编号
+  - 自动过滤空插槽，只显示已安装内存的插槽
+  - 修复插槽数量统计错误问题
+  - JSON/YAML 输出包含详细的插槽位置信息
+
+### v1.1.0 (2025-09-15)
+- 🎉 **新增多格式输出支持**
+  - 支持 JSON 格式输出
+  - 支持 YAML 格式输出
+  - 添加命令行参数支持（-format, -output, -quiet, -version）
+  - 支持输出到文件
+
+### v1.0.2 (2025-09-15)
+- 🐛 **修复中文字符对齐问题**
+  - 正确处理 UTF-8 多字节字符
+  - 优化表格输出格式
+
+### v1.0.0
+- 🚀 **初始版本发布**
+  - 基础硬件信息采集
+  - 自动优化系统设置
+  - 表格格式输出
 
 ## 最佳实践
 
@@ -462,7 +504,7 @@ diff baseline_config.txt current_config.txt
    - 原因：需要root权限或系统不支持
    - 解决：`sudo nodeprobe`
 
-3. **内存插槽信息为空**
+3. **内存插槽信息为空或显示错误**
    - 原因：dmidecode未安装或权限不足
    - 解决：
    ```bash
@@ -472,6 +514,7 @@ diff baseline_config.txt current_config.txt
    # Ubuntu/Debian
    sudo apt-get install -y dmidecode
    ```
+   - 注意：v1.1.1 版本已修复插槽统计错误和空插槽显示问题
 
 4. **网卡速度显示Unknown**
    - 原因：ethtool未安装
@@ -482,6 +525,15 @@ diff baseline_config.txt current_config.txt
    
    # Ubuntu/Debian
    sudo apt-get install -y ethtool
+   ```
+
+5. **编译错误：main redeclared in this block**
+   - 原因：tools/go 目录下有多个包含 main 函数的文件
+   - 解决：单独编译各个工具
+   ```bash
+   # 不要在 tools/go 目录下执行 go build
+   # 正确的方式：
+   go build -o nodeprobe tools/go/NodeProbe.go
    ```
 
 ## 实际应用场景
