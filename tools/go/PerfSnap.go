@@ -1,9 +1,12 @@
 /*
 PerfSnap - Linux服务器性能快照分析工具
 快速采集和分析系统性能数据，包括CPU、内存、磁盘、网络等关键指标
+支持生成高CPU进程的火焰图进行性能分析
 Author: sunyifei83@gmail.com
-Version: 1.0.0
-Tips: PerfSnap需要系统安装sysstat包（提供sar、mpstat、pidstat、iostat等命令）
+Version: 1.1.0
+Tips:
+- PerfSnap需要系统安装sysstat包（提供sar、mpstat、pidstat、iostat等命令）
+- 火焰图功能需要安装perf工具和FlameGraph工具包
 使用:
 1. go build -o perfsnap PerfSnap.go
 2. chmod +x perfsnap
@@ -14,10 +17,13 @@ package main
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -152,6 +158,16 @@ type TopProcess struct {
 	CPU     float64
 	Memory  float64
 	Command string
+}
+
+// FlameGraphConfig 火焰图配置
+type FlameGraphConfig struct {
+	Enabled   bool
+	PID       int    // 指定进程ID，0表示自动选择CPU最高的进程
+	Duration  int    // 采样时长（秒）
+	Frequency int    // 采样频率（Hz）
+	OutputDir string // 输出目录
+	AutoOpen  bool   // 是否自动打开生成的火焰图
 }
 
 // 执行命令并返回输出
@@ -855,58 +871,437 @@ func monitorMode(interval int, duration int) {
 	fmt.Println("\n监控结束")
 }
 
+// 检查并安装FlameGraph工具
+func checkAndInstallFlameGraph() (string, error) {
+	// 检查常见的FlameGraph安装位置
+	commonPaths := []string{
+		"/opt/FlameGraph",
+		"/usr/local/FlameGraph",
+		os.Getenv("HOME") + "/FlameGraph",
+		"./FlameGraph",
+	}
+
+	for _, path := range commonPaths {
+		if _, err := os.Stat(filepath.Join(path, "flamegraph.pl")); err == nil {
+			return path, nil
+		}
+	}
+
+	// 如果没找到，尝试在当前用户目录下克隆
+	installPath := os.Getenv("HOME") + "/FlameGraph"
+	if _, err := os.Stat(installPath); os.IsNotExist(err) {
+		fmt.Println("正在安装FlameGraph工具...")
+		cmd := exec.Command("git", "clone", "https://github.com/brendangregg/FlameGraph.git", installPath)
+		if err := cmd.Run(); err != nil {
+			// 如果git clone失败，尝试使用wget下载关键脚本
+			fmt.Println("Git克隆失败，尝试直接下载脚本...")
+			os.MkdirAll(installPath, 0755)
+
+			scripts := []string{"stackcollapse-perf.pl", "flamegraph.pl"}
+			for _, script := range scripts {
+				url := fmt.Sprintf("http://rzkkr9sg3.hd-bkt.clouddn.com/test_tools/%s", script)
+				cmd := exec.Command("wget", "-O", filepath.Join(installPath, script), url)
+				if err := cmd.Run(); err != nil {
+					return "", fmt.Errorf("无法安装FlameGraph: %v", err)
+				}
+				// 添加执行权限
+				os.Chmod(filepath.Join(installPath, script), 0755)
+			}
+		}
+		fmt.Printf("FlameGraph工具已安装到: %s\n", installPath)
+	}
+
+	return installPath, nil
+}
+
+// 生成火焰图
+func generateFlameGraph(config FlameGraphConfig, topProcs []TopProcess) error {
+	// 检查perf命令是否可用
+	if _, err := exec.LookPath("perf"); err != nil {
+		return fmt.Errorf("perf工具未安装，请先安装: sudo apt-get install linux-tools-common linux-tools-generic 或 sudo yum install perf")
+	}
+
+	// 获取FlameGraph工具路径
+	flameGraphPath, err := checkAndInstallFlameGraph()
+	if err != nil {
+		return err
+	}
+
+	// 确定目标进程
+	targetPID := config.PID
+	processName := ""
+
+	if targetPID == 0 && len(topProcs) > 0 {
+		// 自动选择CPU使用率最高的进程
+		// 对进程按CPU使用率排序
+		sort.Slice(topProcs, func(i, j int) bool {
+			return topProcs[i].CPU > topProcs[j].CPU
+		})
+		targetPID = topProcs[0].PID
+		processName = topProcs[0].Command
+		fmt.Printf("\n自动选择CPU使用率最高的进程: PID=%d, Command=%s, CPU=%.1f%%\n",
+			targetPID, processName, topProcs[0].CPU)
+	} else if targetPID > 0 {
+		// 查找进程名
+		for _, proc := range topProcs {
+			if proc.PID == targetPID {
+				processName = proc.Command
+				break
+			}
+		}
+		if processName == "" {
+			// 尝试从/proc获取进程名
+			if cmdline, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", targetPID)); err == nil {
+				processName = strings.TrimSpace(string(cmdline))
+			} else {
+				processName = fmt.Sprintf("pid_%d", targetPID)
+			}
+		}
+	} else {
+		return fmt.Errorf("没有找到合适的进程用于生成火焰图")
+	}
+
+	// 创建输出目录
+	if config.OutputDir == "" {
+		config.OutputDir = fmt.Sprintf("flamegraph_%s", time.Now().Format("20060102_150405"))
+	}
+	os.MkdirAll(config.OutputDir, 0755)
+
+	// 生成文件名
+	timestamp := time.Now().Format("20060102_150405")
+	perfDataFile := filepath.Join(config.OutputDir, fmt.Sprintf("perf_%s_%d.data", processName, targetPID))
+	perfStackFile := filepath.Join(config.OutputDir, fmt.Sprintf("perf_%s_%d.stacks", processName, targetPID))
+	foldedFile := filepath.Join(config.OutputDir, fmt.Sprintf("perf_%s_%d.folded", processName, targetPID))
+	svgFile := filepath.Join(config.OutputDir, fmt.Sprintf("flamegraph_%s_%d_%s.svg", processName, targetPID, timestamp))
+
+	fmt.Printf("\n开始生成火焰图...\n")
+	fmt.Printf("目标进程: PID=%d (%s)\n", targetPID, processName)
+	fmt.Printf("采样时长: %d秒\n", config.Duration)
+	fmt.Printf("采样频率: %dHz\n", config.Frequency)
+	fmt.Printf("输出目录: %s\n", config.OutputDir)
+
+	// 步骤1: 使用perf record采集数据
+	fmt.Printf("\n[1/4] 正在采集性能数据 (%d秒)...\n", config.Duration)
+	recordCmd := exec.Command("perf", "record",
+		"-F", strconv.Itoa(config.Frequency),
+		"-p", strconv.Itoa(targetPID),
+		"-g",
+		"-o", perfDataFile,
+		"--", "sleep", strconv.Itoa(config.Duration))
+
+	recordCmd.Stdout = os.Stdout
+	recordCmd.Stderr = os.Stderr
+
+	if err := recordCmd.Run(); err != nil {
+		// 如果失败，可能是权限问题，尝试调整kernel.perf_event_paranoid
+		fmt.Println("尝试调整内核参数...")
+		exec.Command("sysctl", "-w", "kernel.perf_event_paranoid=-1").Run()
+
+		// 重试
+		if err := recordCmd.Run(); err != nil {
+			return fmt.Errorf("perf record失败: %v", err)
+		}
+	}
+
+	// 步骤2: 生成调用栈
+	fmt.Println("[2/4] 正在解析调用栈...")
+	scriptCmd := exec.Command("perf", "script", "-i", perfDataFile)
+	stackOutput, err := scriptCmd.Output()
+	if err != nil {
+		return fmt.Errorf("perf script失败: %v", err)
+	}
+
+	// 写入栈文件
+	if err := os.WriteFile(perfStackFile, stackOutput, 0644); err != nil {
+		return fmt.Errorf("写入栈文件失败: %v", err)
+	}
+
+	// 步骤3: 折叠调用栈
+	fmt.Println("[3/4] 正在折叠调用栈...")
+	collapseScript := filepath.Join(flameGraphPath, "stackcollapse-perf.pl")
+	collapseCmd := exec.Command("perl", collapseScript)
+	collapseCmd.Stdin = strings.NewReader(string(stackOutput))
+
+	foldedOutput, err := collapseCmd.Output()
+	if err != nil {
+		// 如果perl脚本执行失败，尝试使用简单的折叠方法
+		fmt.Println("使用备用折叠方法...")
+		foldedOutput = simpleFoldStacks(string(stackOutput))
+	}
+
+	if err := os.WriteFile(foldedFile, foldedOutput, 0644); err != nil {
+		return fmt.Errorf("写入折叠文件失败: %v", err)
+	}
+
+	// 步骤4: 生成火焰图SVG
+	fmt.Println("[4/4] 正在生成火焰图...")
+	flameGraphScript := filepath.Join(flameGraphPath, "flamegraph.pl")
+	flameCmd := exec.Command("perl", flameGraphScript,
+		"--title", fmt.Sprintf("CPU Flame Graph: %s (PID %d)", processName, targetPID),
+		"--width", "1200")
+	flameCmd.Stdin = strings.NewReader(string(foldedOutput))
+
+	svgOutput, err := flameCmd.Output()
+	if err != nil {
+		return fmt.Errorf("生成火焰图失败: %v", err)
+	}
+
+	if err := os.WriteFile(svgFile, svgOutput, 0644); err != nil {
+		return fmt.Errorf("写入SVG文件失败: %v", err)
+	}
+
+	fmt.Printf("\n✅ 火焰图生成成功: %s\n", svgFile)
+
+	// 生成简单的HTML查看器
+	htmlFile := filepath.Join(config.OutputDir, fmt.Sprintf("viewer_%s.html", timestamp))
+	htmlContent := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+    <title>火焰图 - %s (PID %d)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .info {
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .svg-container {
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        iframe {
+            width: 100%%;
+            height: 800px;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>CPU 火焰图分析</h1>
+    <div class="info">
+        <h2>进程信息</h2>
+        <p><strong>进程名:</strong> %s</p>
+        <p><strong>PID:</strong> %d</p>
+        <p><strong>采样时长:</strong> %d 秒</p>
+        <p><strong>采样频率:</strong> %d Hz</p>
+        <p><strong>生成时间:</strong> %s</p>
+    </div>
+    <div class="svg-container">
+        <h2>火焰图</h2>
+        <iframe src="%s"></iframe>
+    </div>
+    <div class="info">
+        <h3>如何阅读火焰图</h3>
+        <ul>
+            <li>X轴表示采样数量的比例，越宽表示执行时间越长</li>
+            <li>Y轴表示调用栈深度，从下到上是调用关系</li>
+            <li>颜色通常是随机的，仅用于区分不同的函数</li>
+            <li>点击某个框可以放大该部分</li>
+            <li>搜索功能可以高亮特定函数</li>
+        </ul>
+    </div>
+</body>
+</html>`, processName, targetPID, processName, targetPID, config.Duration, config.Frequency,
+		time.Now().Format("2006-01-02 15:04:05"), filepath.Base(svgFile))
+
+	if err := os.WriteFile(htmlFile, []byte(htmlContent), 0644); err != nil {
+		return fmt.Errorf("写入HTML文件失败: %v", err)
+	}
+
+	fmt.Printf("查看器已生成: %s\n", htmlFile)
+
+	// 自动打开火焰图
+	if config.AutoOpen {
+		fmt.Println("\n正在打开火焰图...")
+		// 尝试不同的打开命令
+		openCommands := [][]string{
+			{"xdg-open", htmlFile}, // Linux
+			{"open", htmlFile},     // macOS
+			{"start", htmlFile},    // Windows
+		}
+
+		for _, cmd := range openCommands {
+			if err := exec.Command(cmd[0], cmd[1:]...).Start(); err == nil {
+				break
+			}
+		}
+	}
+
+	// 输出分析建议
+	fmt.Printf("\n【火焰图分析提示】\n")
+	fmt.Println(strings.Repeat("-", 60))
+	fmt.Println("1. 查看火焰图: 打开 " + htmlFile)
+	fmt.Println("2. 宽度越宽的函数，CPU占用时间越长")
+	fmt.Println("3. 寻找平顶（plateau）区域，这些可能是性能瓶颈")
+	fmt.Println("4. 关注递归调用和深度调用栈")
+	fmt.Println("5. 使用浏览器的搜索功能查找特定函数")
+
+	return nil
+}
+
+// 简单的栈折叠方法（备用）
+func simpleFoldStacks(perfOutput string) []byte {
+	stacks := make(map[string]int)
+	lines := strings.Split(perfOutput, "\n")
+	currentStack := []string{}
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			if len(currentStack) > 0 {
+				// 反转栈（perf输出是从叶子到根）
+				for i, j := 0, len(currentStack)-1; i < j; i, j = i+1, j-1 {
+					currentStack[i], currentStack[j] = currentStack[j], currentStack[i]
+				}
+				stackStr := strings.Join(currentStack, ";")
+				stacks[stackStr]++
+				currentStack = []string{}
+			}
+		} else if strings.Contains(line, " ") {
+			// 提取函数名
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				funcName := parts[1]
+				// 清理函数名
+				funcName = strings.TrimSuffix(funcName, "+0x")
+				if idx := strings.Index(funcName, "+"); idx > 0 {
+					funcName = funcName[:idx]
+				}
+				currentStack = append(currentStack, funcName)
+			}
+		}
+	}
+
+	// 构建输出
+	var result strings.Builder
+	for stack, count := range stacks {
+		result.WriteString(fmt.Sprintf("%s %d\n", stack, count))
+	}
+
+	return []byte(result.String())
+}
+
 func main() {
-	// 检查是否以root权限运行（某些命令需要root权限）
+	// 定义命令行参数
+	var (
+		monitorFlag  = flag.Bool("m", false, "实时监控模式")
+		monitorFlag2 = flag.Bool("monitor", false, "实时监控模式")
+		interval     = flag.Int("interval", 2, "监控模式刷新间隔(秒)")
+		duration     = flag.Int("duration", 60, "监控模式持续时间(秒)")
+
+		// 火焰图相关参数
+		flameGraph     = flag.Bool("flame", false, "生成CPU火焰图")
+		flamePID       = flag.Int("pid", 0, "指定进程PID(0=自动选择CPU最高)")
+		flameDuration  = flag.Int("flame-duration", 30, "火焰图采样时长(秒)")
+		flameFrequency = flag.Int("flame-freq", 99, "火焰图采样频率(Hz)")
+		flameOutput    = flag.String("flame-output", "", "火焰图输出目录")
+		flameAutoOpen  = flag.Bool("flame-open", false, "自动打开生成的火焰图")
+
+		helpFlag  = flag.Bool("h", false, "显示帮助信息")
+		helpFlag2 = flag.Bool("help", false, "显示帮助信息")
+		version   = flag.Bool("version", false, "显示版本信息")
+	)
+
+	flag.Parse()
+
+	// 显示版本信息
+	if *version {
+		fmt.Println("PerfSnap v1.1.0")
+		fmt.Println("支持火焰图生成功能")
+		os.Exit(0)
+	}
+
+	// 显示帮助信息
+	if *helpFlag || *helpFlag2 {
+		fmt.Println("PerfSnap v1.1.0 - Linux系统性能快照分析工具")
+		fmt.Println("\n用法:")
+		fmt.Println("  perfsnap [选项]")
+		fmt.Println("\n基础选项:")
+		fmt.Println("  无参数               生成一次性能快照报告")
+		fmt.Println("  -m, --monitor       实时监控模式")
+		fmt.Println("  -interval N         监控刷新间隔(秒), 默认2")
+		fmt.Println("  -duration N         监控持续时间(秒), 默认60")
+		fmt.Println("\n火焰图选项:")
+		fmt.Println("  -flame              生成CPU火焰图")
+		fmt.Println("  -pid N              指定进程PID(0=自动选择CPU最高), 默认0")
+		fmt.Println("  -flame-duration N   火焰图采样时长(秒), 默认30")
+		fmt.Println("  -flame-freq N       火焰图采样频率(Hz), 默认99")
+		fmt.Println("  -flame-output DIR   火焰图输出目录")
+		fmt.Println("  -flame-open         自动打开生成的火焰图")
+		fmt.Println("\n其他选项:")
+		fmt.Println("  -h, --help          显示帮助信息")
+		fmt.Println("  -version            显示版本信息")
+		fmt.Println("\n示例:")
+		fmt.Println("  perfsnap                        # 生成性能快照")
+		fmt.Println("  perfsnap -m                     # 实时监控(默认2秒间隔，60秒)")
+		fmt.Println("  perfsnap -m -interval 5 -duration 120  # 每5秒刷新，持续120秒")
+		fmt.Println("  perfsnap -flame                 # 生成CPU最高进程的火焰图")
+		fmt.Println("  perfsnap -flame -pid 1234       # 生成指定进程的火焰图")
+		fmt.Println("  perfsnap -flame -flame-duration 60 -flame-open  # 采样60秒并自动打开")
+		fmt.Println("\n注意:")
+		fmt.Println("  - 建议使用root权限运行以获取完整数据")
+		fmt.Println("  - 火焰图功能需要安装perf工具")
+		fmt.Println("  - 首次使用会自动下载FlameGraph工具")
+		fmt.Println("\n项目: https://github.com/sunyifei83/devops-toolkit")
+		return
+	}
+
+	// 检查是否以root权限运行
 	if os.Geteuid() != 0 {
 		fmt.Println("⚠️  建议以root权限运行以获取完整的性能数据")
 		fmt.Println("   sudo perfsnap")
 		fmt.Println()
 	}
 
-	// 检查命令行参数
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "-m", "--monitor":
-			// 实时监控模式
-			interval := 2  // 默认2秒间隔
-			duration := 60 // 默认监控60秒
-
-			if len(os.Args) > 2 {
-				if i, err := strconv.Atoi(os.Args[2]); err == nil {
-					interval = i
-				}
-			}
-			if len(os.Args) > 3 {
-				if d, err := strconv.Atoi(os.Args[3]); err == nil {
-					duration = d
-				}
-			}
-
-			monitorMode(interval, duration)
-			return
-
-		case "-h", "--help":
-			fmt.Println("PerfSnap - Linux系统性能快照分析工具")
-			fmt.Println("\n用法:")
-			fmt.Println("  perfsnap              - 生成一次性能快照报告")
-			fmt.Println("  perfsnap -m [间隔] [持续时间] - 实时监控模式")
-			fmt.Println("  perfsnap -h          - 显示帮助信息")
-			fmt.Println("\n示例:")
-			fmt.Println("  perfsnap              - 生成性能快照报告")
-			fmt.Println("  perfsnap -m           - 实时监控(默认2秒间隔，60秒)")
-			fmt.Println("  perfsnap -m 5 120     - 每5秒刷新，持续120秒")
-			fmt.Println("\n项目: https://github.com/sunyifei83/devops-toolkit")
-			return
-		}
+	// 实时监控模式
+	if *monitorFlag || *monitorFlag2 {
+		monitorMode(*interval, *duration)
+		return
 	}
 
-	// 默认模式：生成一次性报告
+	// 生成性能报告
 	fmt.Println("正在收集系统性能数据，请稍候...")
-
 	startTime := time.Now()
 	data := collectPerformanceData()
 	elapsed := time.Since(startTime)
 
 	printPerformanceReport(data)
 	fmt.Printf("\n数据收集耗时: %.2f秒\n", elapsed.Seconds())
+
+	// 如果需要生成火焰图
+	if *flameGraph {
+		config := FlameGraphConfig{
+			Enabled:   true,
+			PID:       *flamePID,
+			Duration:  *flameDuration,
+			Frequency: *flameFrequency,
+			OutputDir: *flameOutput,
+			AutoOpen:  *flameAutoOpen,
+		}
+
+		fmt.Println("\n" + strings.Repeat("=", 80))
+		fmt.Println("                    开始生成火焰图")
+		fmt.Println(strings.Repeat("=", 80))
+
+		if err := generateFlameGraph(config, data.TopProcs); err != nil {
+			fmt.Printf("\n❌ 火焰图生成失败: %v\n", err)
+			fmt.Println("\n可能的解决方案:")
+			fmt.Println("1. 确保以root权限运行: sudo perfsnap -flame")
+			fmt.Println("2. 安装perf工具:")
+			fmt.Println("   Ubuntu/Debian: sudo apt-get install linux-tools-common linux-tools-generic")
+			fmt.Println("   CentOS/RHEL: sudo yum install perf")
+			fmt.Println("3. 检查目标进程是否存在")
+		}
+	}
 }
