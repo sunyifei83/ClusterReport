@@ -2,19 +2,25 @@
 NodeProbe - Linux服务器节点配置信息收集工具
 全面采集服务器硬件配置、系统状态和软件环境信息，支持自动优化系统设置
 Author: sunyifei83@gmail.com
-Version: 1.0.2
+Version: 1.1.0
 项目: https://github.com/sunyifei83/devops-toolkit
+
+Features:
+- 支持多格式输出：表格(默认)、JSON、YAML
+- 自动优化系统设置
+- 完美支持中文字符对齐
 
 TODO:
 1. 支持远程节点信息采集
 2. 支持节点硬件基准测试（CPU/内存/磁盘/网络）
-3. 支持JSON/YAML格式输出
 */
 package main
 
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -22,64 +28,67 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ServerInfo 存储服务器信息
 type ServerInfo struct {
-	Hostname      string
-	LoadAverage   string
-	Timezone      string
-	OS            string
-	Kernel        string
-	CPU           CPUInfo
-	Memory        MemoryInfo
-	Disks         DiskInfo
-	Network       []NetworkInterface
-	Python        PythonInfo
-	Java          JavaInfo
-	KernelModules KernelModuleStatus
+	Hostname      string             `json:"hostname" yaml:"hostname"`
+	LoadAverage   string             `json:"load_average" yaml:"load_average"`
+	Timezone      string             `json:"timezone" yaml:"timezone"`
+	OS            string             `json:"os" yaml:"os"`
+	Kernel        string             `json:"kernel" yaml:"kernel"`
+	CPU           CPUInfo            `json:"cpu" yaml:"cpu"`
+	Memory        MemoryInfo         `json:"memory" yaml:"memory"`
+	Disks         DiskInfo           `json:"disks" yaml:"disks"`
+	Network       []NetworkInterface `json:"network" yaml:"network"`
+	Python        PythonInfo         `json:"python" yaml:"python"`
+	Java          JavaInfo           `json:"java" yaml:"java"`
+	KernelModules KernelModuleStatus `json:"kernel_modules" yaml:"kernel_modules"`
+	Timestamp     string             `json:"timestamp" yaml:"timestamp"`
+	Version       string             `json:"nodeprobe_version" yaml:"nodeprobe_version"`
 }
 
 type CPUInfo struct {
-	Model           string
-	Cores           int
-	RunMode         string
-	PerformanceMode string
+	Model           string `json:"model" yaml:"model"`
+	Cores           int    `json:"cores" yaml:"cores"`
+	RunMode         string `json:"run_mode" yaml:"run_mode"`
+	PerformanceMode string `json:"performance_mode" yaml:"performance_mode"`
 }
 
 type MemoryInfo struct {
-	TotalGB float64
-	Slots   []string
+	TotalGB float64  `json:"total_gb" yaml:"total_gb"`
+	Slots   []string `json:"slots" yaml:"slots"`
 }
 
 type DiskInfo struct {
-	SystemDisk  string
-	DataDisks   []string
-	TotalDisks  int
-	DataDiskNum int
+	SystemDisk  string   `json:"system_disk" yaml:"system_disk"`
+	DataDisks   []string `json:"data_disks" yaml:"data_disks"`
+	TotalDisks  int      `json:"total_disks" yaml:"total_disks"`
+	DataDiskNum int      `json:"data_disk_num" yaml:"data_disk_num"`
 }
 
 type NetworkInterface struct {
-	Name   string
-	Status string
-	Speed  string
-	IP     string
+	Name   string `json:"name" yaml:"name"`
+	Status string `json:"status" yaml:"status"`
+	Speed  string `json:"speed" yaml:"speed"`
+	IP     string `json:"ip" yaml:"ip"`
 }
 
 type PythonInfo struct {
-	Version string
-	Path    string
+	Version string `json:"version" yaml:"version"`
+	Path    string `json:"path" yaml:"path"`
 }
 
 type JavaInfo struct {
-	Version string
-	Path    string
+	Version string `json:"version" yaml:"version"`
+	Path    string `json:"path" yaml:"path"`
 }
 
 type KernelModuleStatus struct {
-	NfConntrack bool
-	BrNetfilter bool
-	Message     string
+	NfConntrack bool   `json:"nf_conntrack" yaml:"nf_conntrack"`
+	BrNetfilter bool   `json:"br_netfilter" yaml:"br_netfilter"`
+	Message     string `json:"message" yaml:"message"`
 }
 
 // 执行命令并返回输出
@@ -759,20 +768,156 @@ func truncateByWidth(s string, maxWidth int) string {
 	return string(runes[:cutIndex]) + "..."
 }
 
-func main() {
-	// 打印工具标识
-	fmt.Println("NodeProbe v1.0.0 - Linux节点配置探测工具")
-	fmt.Println("=" + strings.Repeat("=", 65))
+// outputJSON 输出JSON格式
+func outputJSON(info ServerInfo) error {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(info)
+}
 
-	// 检查是否以root权限运行
-	if os.Geteuid() != 0 {
-		fmt.Println("⚠️  某些硬件信息需要root权限才能获取完整数据")
-		fmt.Println("建议使用: sudo nodeprobe")
-		fmt.Println()
+// outputYAML 输出YAML格式
+func outputYAML(info ServerInfo) error {
+	// 手动构建YAML输出
+	var output strings.Builder
+
+	output.WriteString("# NodeProbe Configuration Report\n")
+	output.WriteString(fmt.Sprintf("# Generated at: %s\n\n", info.Timestamp))
+
+	output.WriteString(fmt.Sprintf("hostname: %s\n", info.Hostname))
+	output.WriteString(fmt.Sprintf("load_average: %s\n", info.LoadAverage))
+	output.WriteString(fmt.Sprintf("timezone: %s\n", info.Timezone))
+	output.WriteString(fmt.Sprintf("os: %s\n", info.OS))
+	output.WriteString(fmt.Sprintf("kernel: %s\n", info.Kernel))
+	output.WriteString(fmt.Sprintf("timestamp: %s\n", info.Timestamp))
+	output.WriteString(fmt.Sprintf("nodeprobe_version: %s\n\n", info.Version))
+
+	// CPU信息
+	output.WriteString("cpu:\n")
+	output.WriteString(fmt.Sprintf("  model: %s\n", info.CPU.Model))
+	output.WriteString(fmt.Sprintf("  cores: %d\n", info.CPU.Cores))
+	output.WriteString(fmt.Sprintf("  run_mode: %s\n", info.CPU.RunMode))
+	output.WriteString(fmt.Sprintf("  performance_mode: %s\n\n", info.CPU.PerformanceMode))
+
+	// 内存信息
+	output.WriteString("memory:\n")
+	output.WriteString(fmt.Sprintf("  total_gb: %.2f\n", info.Memory.TotalGB))
+	if len(info.Memory.Slots) > 0 {
+		output.WriteString("  slots:\n")
+		for _, slot := range info.Memory.Slots {
+			output.WriteString(fmt.Sprintf("    - %s\n", slot))
+		}
+	}
+	output.WriteString("\n")
+
+	// 磁盘信息
+	output.WriteString("disks:\n")
+	output.WriteString(fmt.Sprintf("  system_disk: %s\n", info.Disks.SystemDisk))
+	output.WriteString(fmt.Sprintf("  total_disks: %d\n", info.Disks.TotalDisks))
+	output.WriteString(fmt.Sprintf("  data_disk_num: %d\n", info.Disks.DataDiskNum))
+	if len(info.Disks.DataDisks) > 0 {
+		output.WriteString("  data_disks:\n")
+		for _, disk := range info.Disks.DataDisks {
+			output.WriteString(fmt.Sprintf("    - %s\n", disk))
+		}
+	}
+	output.WriteString("\n")
+
+	// 网络信息
+	output.WriteString("network:\n")
+	for _, iface := range info.Network {
+		output.WriteString(fmt.Sprintf("  - name: %s\n", iface.Name))
+		output.WriteString(fmt.Sprintf("    status: %s\n", iface.Status))
+		output.WriteString(fmt.Sprintf("    speed: %s\n", iface.Speed))
+		output.WriteString(fmt.Sprintf("    ip: %s\n", iface.IP))
+	}
+	output.WriteString("\n")
+
+	// Python信息
+	output.WriteString("python:\n")
+	output.WriteString(fmt.Sprintf("  version: %s\n", info.Python.Version))
+	output.WriteString(fmt.Sprintf("  path: %s\n\n", info.Python.Path))
+
+	// Java信息
+	output.WriteString("java:\n")
+	output.WriteString(fmt.Sprintf("  version: %s\n", info.Java.Version))
+	output.WriteString(fmt.Sprintf("  path: %s\n\n", info.Java.Path))
+
+	// 内核模块信息
+	output.WriteString("kernel_modules:\n")
+	output.WriteString(fmt.Sprintf("  nf_conntrack: %v\n", info.KernelModules.NfConntrack))
+	output.WriteString(fmt.Sprintf("  br_netfilter: %v\n", info.KernelModules.BrNetfilter))
+	output.WriteString(fmt.Sprintf("  message: %s\n", info.KernelModules.Message))
+
+	fmt.Print(output.String())
+	return nil
+}
+
+func main() {
+	// 定义命令行参数
+	var (
+		outputFormat = flag.String("format", "table", "输出格式: table(默认), json, yaml")
+		showVersion  = flag.Bool("version", false, "显示版本信息")
+		quiet        = flag.Bool("quiet", false, "静默模式，减少提示信息")
+		outputFile   = flag.String("output", "", "输出到文件")
+	)
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "NodeProbe v1.1.0 - Linux节点配置探测工具\n\n")
+		fmt.Fprintf(os.Stderr, "用法: %s [选项]\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "选项:\n")
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\n示例:\n")
+		fmt.Fprintf(os.Stderr, "  %s                    # 默认表格输出\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -format json       # JSON格式输出\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -format yaml       # YAML格式输出\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -output report.json -format json  # 输出到文件\n", os.Args[0])
 	}
 
-	fmt.Println("正在探测节点配置信息...")
+	flag.Parse()
 
+	// 显示版本信息
+	if *showVersion {
+		fmt.Println("NodeProbe v1.1.0")
+		os.Exit(0)
+	}
+
+	// 验证输出格式
+	validFormats := map[string]bool{"table": true, "json": true, "yaml": true}
+	if !validFormats[*outputFormat] {
+		fmt.Fprintf(os.Stderr, "错误: 不支持的输出格式 '%s'\n", *outputFormat)
+		fmt.Fprintf(os.Stderr, "支持的格式: table, json, yaml\n")
+		os.Exit(1)
+	}
+
+	// 如果指定了输出文件，重定向stdout
+	var originalStdout *os.File
+	if *outputFile != "" {
+		originalStdout = os.Stdout
+		file, err := os.Create(*outputFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "错误: 无法创建输出文件 %s: %v\n", *outputFile, err)
+			os.Exit(1)
+		}
+		defer file.Close()
+		os.Stdout = file
+	}
+
+	// 非静默模式且表格输出时显示提示信息
+	if !*quiet && *outputFormat == "table" && *outputFile == "" {
+		fmt.Println("NodeProbe v1.1.0 - Linux节点配置探测工具")
+		fmt.Println("=" + strings.Repeat("=", 65))
+
+		// 检查是否以root权限运行
+		if os.Geteuid() != 0 {
+			fmt.Println("⚠️  某些硬件信息需要root权限才能获取完整数据")
+			fmt.Println("建议使用: sudo nodeprobe")
+			fmt.Println()
+		}
+
+		fmt.Println("正在探测节点配置信息...")
+	}
+
+	// 收集服务器信息
 	info := ServerInfo{
 		Hostname:      getHostname(),
 		LoadAverage:   getLoadAverage(),
@@ -784,12 +929,37 @@ func main() {
 		Python:        getPythonInfo(),
 		Java:          getJavaInfo(),
 		KernelModules: checkAndLoadKernelModules(),
+		Timestamp:     time.Now().Format("2006-01-02 15:04:05"),
+		Version:       "1.1.0",
 	}
 
 	info.OS, info.Kernel = getOSInfo()
 
-	fmt.Print("\033[2J\033[H") // 清屏
-	printServerInfo(info)
+	// 根据输出格式选择输出方式
+	switch *outputFormat {
+	case "json":
+		if err := outputJSON(info); err != nil {
+			fmt.Fprintf(os.Stderr, "错误: 输出JSON失败: %v\n", err)
+			os.Exit(1)
+		}
+	case "yaml":
+		if err := outputYAML(info); err != nil {
+			fmt.Fprintf(os.Stderr, "错误: 输出YAML失败: %v\n", err)
+			os.Exit(1)
+		}
+	default: // table
+		if !*quiet && *outputFormat == "table" {
+			fmt.Print("\033[2J\033[H") // 清屏
+		}
+		printServerInfo(info)
+		if !*quiet {
+			fmt.Println("\n由 NodeProbe 生成 | https://github.com/sunyifei83/devops-toolkit")
+		}
+	}
 
-	fmt.Println("\n由 NodeProbe 生成 | https://github.com/sunyifei83/devops-toolkit")
+	// 如果输出到文件，显示成功消息
+	if *outputFile != "" && originalStdout != nil {
+		os.Stdout = originalStdout
+		fmt.Printf("✅ 结果已保存到: %s\n", *outputFile)
+	}
 }

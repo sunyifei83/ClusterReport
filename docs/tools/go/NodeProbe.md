@@ -2,20 +2,23 @@
 
 ## 概述
 
-`NodeProbe` 是一个专业的Linux服务器节点配置信息收集工具，能够全面探测和采集服务器的硬件配置、系统状态、软件环境等关键信息。该工具不仅能够收集配置信息，还具备自动优化系统设置的能力，是运维人员进行服务器管理、资产清点、故障排查的得力助手。
+`NodeProbe` 是一个专业的Linux服务器节点配置信息收集工具，能够全面探测和采集服务器的硬件配置、系统状态、软件环境等关键信息。该工具不仅能够收集配置信息，还具备自动优化系统设置的能力，支持多种输出格式，是运维人员进行服务器管理、资产清点、故障排查的得力助手。
 
-**版本**: 1.0.0  
-**作者**: sunyifei@qiniu.com  
-**项目**: https://github.com/sunyifei83/devops-toolkit
+**版本**: 1.1.0  
+**作者**: sunyifei83@gmail.com  
+**项目**: https://github.com/sunyifei83/devops-toolkit  
+**更新日期**: 2025-09-15
 
 ## 核心特性
 
 - 🔍 **全面探测**: 深度采集CPU、内存、磁盘、网络等硬件信息
 - 🚀 **自动优化**: 智能识别并自动优化系统性能设置
-- 📊 **清晰展示**: 格式化输出，信息层次分明
+- 📊 **多格式输出**: 支持表格、JSON、YAML三种输出格式
 - ⚡ **快速执行**: 秒级完成全部信息采集
 - 🔧 **智能调优**: 自动调整CPU性能模式和时区设置
 - 🛡️ **内核检查**: 自动检测并加载必要的内核模块
+- 🌍 **UTF-8支持**: 完美处理中文字符，输出格式整齐美观
+- 💾 **文件导出**: 支持将结果导出到文件，便于自动化处理
 
 ## 主要功能模块
 
@@ -104,11 +107,67 @@ nodeprobe
 ### 基本用法
 
 ```bash
-# 普通用户运行（部分功能受限）
-./nodeprobe
-
-# 推荐：使用root权限运行（完整功能）
+# 默认表格格式输出
 sudo nodeprobe
+
+# JSON格式输出
+sudo nodeprobe -format json
+
+# YAML格式输出
+sudo nodeprobe -format yaml
+
+# 输出到文件
+sudo nodeprobe -format json -output server_info.json
+
+# 静默模式（减少提示信息）
+sudo nodeprobe -quiet
+
+# 查看版本
+nodeprobe -version
+
+# 查看帮助
+nodeprobe -h
+```
+
+### 命令行参数
+
+| 参数 | 说明 | 默认值 | 示例 |
+|------|------|--------|------|
+| `-format` | 输出格式 | table | `-format json` |
+| `-output` | 输出文件路径 | 无(输出到终端) | `-output report.json` |
+| `-quiet` | 静默模式 | false | `-quiet` |
+| `-version` | 显示版本信息 | - | `-version` |
+| `-h` | 显示帮助信息 | - | `-h` |
+
+### 输出格式说明
+
+#### 1. 表格格式（默认）
+最直观的展示方式，适合人工查看：
+```bash
+sudo nodeprobe
+```
+
+#### 2. JSON格式
+适合程序处理和API集成：
+```bash
+# 输出到终端
+sudo nodeprobe -format json
+
+# 输出到文件
+sudo nodeprobe -format json -output config.json
+
+# 使用jq处理JSON输出
+sudo nodeprobe -format json | jq '.cpu'
+```
+
+#### 3. YAML格式
+适合配置管理和Ansible等工具：
+```bash
+# 输出到终端
+sudo nodeprobe -format yaml
+
+# 输出到文件
+sudo nodeprobe -format yaml -output config.yaml
 ```
 
 ### 权限说明
@@ -133,8 +192,10 @@ sudo nodeprobe
 
 ## 输出示例
 
+### 表格格式输出
+
 ```
-NodeProbe v1.0.0 - Linux节点配置探测工具
+NodeProbe v1.1.0 - Linux节点配置探测工具
 ==================================================================
 
 正在探测节点配置信息...
@@ -182,6 +243,135 @@ NodeProbe v1.0.0 - Linux节点配置探测工具
 ╚════════════════════════════════════════════════════════════════╝
 
 由 NodeProbe 生成 | https://github.com/sunyifei83/devops-toolkit
+```
+
+### JSON格式输出
+
+```json
+{
+  "hostname": "prod-server-01",
+  "load_average": "0.15 0.12 0.10",
+  "timezone": "Asia/Shanghai",
+  "os": "CentOS Linux 7.9.2009 (Core)",
+  "kernel": "3.10.0-1160.71.1.el7.x86_64",
+  "cpu": {
+    "model": "Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz",
+    "cores": 32,
+    "run_mode": "32-bit, 64-bit",
+    "performance_mode": "最大性能模式 (performance)"
+  },
+  "memory": {
+    "total_gb": 62.79,
+    "slots": [
+      "16384 MB",
+      "16384 MB",
+      "16384 MB",
+      "16384 MB"
+    ]
+  },
+  "disks": {
+    "system_disk": "/dev/sda1 45G/200G (23%)",
+    "data_disks": [
+      "/dev/sdb 2.0T",
+      "/dev/sdc 2.0T",
+      "/dev/sdd 4.0T",
+      "/dev/sde 4.0T"
+    ],
+    "total_disks": 5,
+    "data_disk_num": 4
+  },
+  "network": [
+    {
+      "name": "eth0",
+      "status": "UP",
+      "speed": "1000Mb/s",
+      "ip": "192.168.1.100/24"
+    },
+    {
+      "name": "eth1",
+      "status": "UP",
+      "speed": "10000Mb/s",
+      "ip": "10.0.0.50/24"
+    }
+  ],
+  "python": {
+    "version": "Python 3.6.8",
+    "path": "/usr/bin/python3"
+  },
+  "java": {
+    "version": "Java 1.8.0_292",
+    "path": "/usr/bin/java (JAVA_HOME: /usr/java/jdk)"
+  },
+  "kernel_modules": {
+    "nf_conntrack": true,
+    "br_netfilter": true,
+    "message": "nf_conntrack: 已加载, br_netfilter: 已加载"
+  },
+  "timestamp": "2025-01-15 12:00:00",
+  "nodeprobe_version": "1.1.0"
+}
+```
+
+### YAML格式输出
+
+```yaml
+# NodeProbe Configuration Report
+# Generated at: 2025-01-15 12:00:00
+
+hostname: prod-server-01
+load_average: 0.15 0.12 0.10
+timezone: Asia/Shanghai
+os: CentOS Linux 7.9.2009 (Core)
+kernel: 3.10.0-1160.71.1.el7.x86_64
+timestamp: 2025-01-15 12:00:00
+nodeprobe_version: 1.1.0
+
+cpu:
+  model: Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz
+  cores: 32
+  run_mode: 32-bit, 64-bit
+  performance_mode: 最大性能模式 (performance)
+
+memory:
+  total_gb: 62.79
+  slots:
+    - 16384 MB
+    - 16384 MB
+    - 16384 MB
+    - 16384 MB
+
+disks:
+  system_disk: /dev/sda1 45G/200G (23%)
+  total_disks: 5
+  data_disk_num: 4
+  data_disks:
+    - /dev/sdb 2.0T
+    - /dev/sdc 2.0T
+    - /dev/sdd 4.0T
+    - /dev/sde 4.0T
+
+network:
+  - name: eth0
+    status: UP
+    speed: 1000Mb/s
+    ip: 192.168.1.100/24
+  - name: eth1
+    status: UP
+    speed: 10000Mb/s
+    ip: 10.0.0.50/24
+
+python:
+  version: Python 3.6.8
+  path: /usr/bin/python3
+
+java:
+  version: Java 1.8.0_292
+  path: /usr/bin/java (JAVA_HOME: /usr/java/jdk)
+
+kernel_modules:
+  nf_conntrack: true
+  br_netfilter: true
+  message: nf_conntrack: 已加载, br_netfilter: 已加载
 ```
 
 ## 自动优化详解
@@ -294,6 +484,106 @@ diff baseline_config.txt current_config.txt
    sudo apt-get install -y ethtool
    ```
 
+## 实际应用场景
+
+### 1. CI/CD集成
+
+在自动化部署流程中集成NodeProbe：
+
+```bash
+#!/bin/bash
+# 部署前检查服务器配置
+nodeprobe -format json -output pre_deploy.json
+
+# 执行部署
+./deploy.sh
+
+# 部署后验证
+nodeprobe -format json -output post_deploy.json
+
+# 对比配置变化
+diff <(jq . pre_deploy.json) <(jq . post_deploy.json)
+```
+
+### 2. 监控系统集成
+
+将NodeProbe数据推送到监控系统：
+
+```bash
+#!/bin/bash
+# 定期收集配置信息并推送到监控系统
+nodeprobe -format json | curl -X POST \
+  -H "Content-Type: application/json" \
+  -d @- \
+  http://monitoring.example.com/api/node/config
+```
+
+### 3. Ansible集成
+
+在Ansible playbook中使用：
+
+```yaml
+- name: 收集节点配置
+  shell: nodeprobe -format yaml -output /tmp/node_config.yaml
+  
+- name: 读取配置信息
+  include_vars:
+    file: /tmp/node_config.yaml
+    name: node_config
+    
+- name: 根据配置执行任务
+  debug:
+    msg: "CPU核心数: {{ node_config.cpu.cores }}"
+```
+
+### 4. 批量配置收集
+
+批量收集多台服务器配置：
+
+```bash
+#!/bin/bash
+# batch_collect.sh
+SERVERS="server1 server2 server3"
+OUTPUT_DIR="configs_$(date +%Y%m%d)"
+mkdir -p $OUTPUT_DIR
+
+for server in $SERVERS; do
+    echo "收集 $server 配置..."
+    ssh root@$server "nodeprobe -format json" > $OUTPUT_DIR/${server}.json
+done
+
+# 生成汇总报告
+echo "生成汇总报告..."
+jq -s '.[0] | {
+    servers: [.[] | {
+        hostname: .hostname,
+        cpu_cores: .cpu.cores,
+        memory_gb: .memory.total_gb,
+        disk_count: .disks.total_disks
+    }]
+}' $OUTPUT_DIR/*.json > $OUTPUT_DIR/summary.json
+```
+
+### 5. 配置基线管理
+
+建立和维护配置基线：
+
+```bash
+#!/bin/bash
+# 建立基线
+nodeprobe -format json -output baseline.json
+
+# 定期检查配置偏移
+nodeprobe -format json | jq -r --slurpfile baseline baseline.json '
+    if .cpu.cores != $baseline[0].cpu.cores then
+        "⚠️ CPU核心数变化: \($baseline[0].cpu.cores) -> \(.cpu.cores)"
+    else empty end,
+    if .memory.total_gb != $baseline[0].memory.total_gb then
+        "⚠️ 内存容量变化: \($baseline[0].memory.total_gb) -> \(.memory.total_gb)"
+    else empty end
+'
+```
+
 ## 扩展开发
 
 ### 未来功能规划
@@ -303,28 +593,26 @@ diff baseline_config.txt current_config.txt
    nodeprobe --remote host1,host2,host3
    ```
 
-2. **多格式输出**
-   ```bash
-   nodeprobe --format json > config.json
-   nodeprobe --format yaml > config.yaml
-   ```
-
-3. **硬件基准测试**
+2. **硬件基准测试**
    ```bash
    nodeprobe --benchmark cpu
    nodeprobe --benchmark memory
    nodeprobe --benchmark disk
    ```
 
-4. **配置对比**
+3. **配置对比**
    ```bash
-   nodeprobe --compare baseline.txt
+   nodeprobe --compare baseline.json
    ```
 
-5. **Web界面**
+4. **Web界面**
    - 集中管理多节点
    - 历史数据展示
    - 配置变更追踪
+
+5. **插件系统**
+   - 支持自定义采集模块
+   - 第三方工具集成
 
 ## 与PerfSnap配合使用
 
