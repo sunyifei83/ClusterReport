@@ -1,8 +1,8 @@
 /*
 NodeProbe - Linux服务器节点配置信息收集工具
 全面采集服务器硬件配置、系统状态和软件环境信息，支持自动优化系统设置
-Author: sunyifei@qiniu.com
-Version: 1.0.0
+Author: sunyifei83@gmail.com
+Version: 1.0.2
 项目: https://github.com/sunyifei83/devops-toolkit
 
 TODO:
@@ -615,95 +615,148 @@ func getJavaInfo() JavaInfo {
 	return info
 }
 
+// 填充空格到指定宽度
+func padRight(s string, width int) string {
+	sWidth := displayWidth(s)
+	if sWidth >= width {
+		return truncateByWidth(s, width)
+	}
+	return s + strings.Repeat(" ", width-sWidth)
+}
+
 // 打印服务器信息
 func printServerInfo(info ServerInfo) {
 	fmt.Println("╔════════════════════════════════════════════════════════════════╗")
+
+	// 基础信息
 	fmt.Printf("║ %-20s %-43s ║\n", "主机名:", info.Hostname)
 	fmt.Printf("║ %-20s %-43s ║\n", "系统负载:", info.LoadAverage)
 	fmt.Printf("║ %-20s %-43s ║\n", "时区:", info.Timezone)
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
 
 	// 系统信息
-	fmt.Printf("║ %-20s %-43s ║\n", "操作系统:", truncateString(info.OS, 43))
-	fmt.Printf("║ %-20s %-43s ║\n", "内核版本:", info.Kernel)
+	fmt.Printf("║ %s %s ║\n", padRight("操作系统:", 20), padRight(info.OS, 43))
+	fmt.Printf("║ %s %s ║\n", padRight("内核版本:", 20), padRight(info.Kernel, 43))
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
 
 	// CPU信息
-	fmt.Printf("║ %-20s %-43s ║\n", "CPU型号:", truncateString(info.CPU.Model, 43))
-	fmt.Printf("║ %-20s %-43d ║\n", "CPU核心数:", info.CPU.Cores)
-	fmt.Printf("║ %-20s %-43s ║\n", "CPU运行模式:", info.CPU.RunMode)
-	fmt.Printf("║ %-20s %-43s ║\n", "CPU性能模式:", truncateString(info.CPU.PerformanceMode, 43))
+	fmt.Printf("║ %s %s ║\n", padRight("CPU型号:", 20), padRight(info.CPU.Model, 43))
+	fmt.Printf("║ %s %s ║\n", padRight("CPU核心数:", 20), padRight(fmt.Sprintf("%d", info.CPU.Cores), 43))
+	fmt.Printf("║ %s %s ║\n", padRight("CPU运行模式:", 20), padRight(info.CPU.RunMode, 43))
+	fmt.Printf("║ %s %s ║\n", padRight("CPU性能模式:", 20), padRight(info.CPU.PerformanceMode, 43))
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
 
 	// 内存信息
-	fmt.Printf("║ %-20s %.2f GB %36s ║\n", "总内存:", info.Memory.TotalGB, "")
+	memStr := fmt.Sprintf("%.2f GB", info.Memory.TotalGB)
+	fmt.Printf("║ %s %s ║\n", padRight("总内存:", 20), padRight(memStr, 43))
 	if len(info.Memory.Slots) > 0 {
-		fmt.Printf("║ %-20s %-43s ║\n", "内存插槽:", fmt.Sprintf("%d个插槽已使用", len(info.Memory.Slots)))
+		slotInfo := fmt.Sprintf("%d个插槽已使用", len(info.Memory.Slots))
+		fmt.Printf("║ %s %s ║\n", padRight("内存插槽:", 20), padRight(slotInfo, 43))
 		for i, slot := range info.Memory.Slots {
-			fmt.Printf("║   插槽%d: %-55s ║\n", i+1, slot)
+			slotLabel := fmt.Sprintf("  插槽%d:", i+1)
+			fmt.Printf("║ %s %s ║\n", padRight(slotLabel, 20), padRight(slot, 43))
 		}
 	}
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
 
 	// 磁盘信息
-	fmt.Printf("║ %-20s %-43s ║\n", "系统盘:", truncateString(info.Disks.SystemDisk, 43))
-	fmt.Printf("║ %-20s 总计: %d, 数据盘: %d %22s ║\n", "磁盘数量:",
-		info.Disks.TotalDisks, info.Disks.DataDiskNum, "")
+	fmt.Printf("║ %s %s ║\n", padRight("系统盘:", 20), padRight(info.Disks.SystemDisk, 43))
+	diskCount := fmt.Sprintf("总计: %d, 数据盘: %d", info.Disks.TotalDisks, info.Disks.DataDiskNum)
+	fmt.Printf("║ %s %s ║\n", padRight("磁盘数量:", 20), padRight(diskCount, 43))
 
 	if len(info.Disks.DataDisks) > 0 {
 		for i, disk := range info.Disks.DataDisks {
 			if i == 0 {
-				fmt.Printf("║ %-20s %-43s ║\n", "数据盘:", truncateString(disk, 43))
+				fmt.Printf("║ %s %s ║\n", padRight("数据盘:", 20), padRight(disk, 43))
 			} else {
-				fmt.Printf("║ %-20s %-43s ║\n", "", truncateString(disk, 43))
+				fmt.Printf("║ %s %s ║\n", padRight("", 20), padRight(disk, 43))
 			}
 		}
 	}
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
 
 	// 网络信息
-	fmt.Printf("║ %-20s %-43d ║\n", "网络接口数:", len(info.Network))
+	fmt.Printf("║ %s %s ║\n", padRight("网络接口数:", 20), padRight(fmt.Sprintf("%d", len(info.Network)), 43))
 	for _, iface := range info.Network {
 		netInfo := fmt.Sprintf("%s [%s] %s %s", iface.Name, iface.Status, iface.Speed, iface.IP)
-		fmt.Printf("║   %-61s ║\n", truncateString(netInfo, 61))
+		fmt.Printf("║   %s ║\n", padRight(netInfo, 61))
 	}
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
 
 	// Python信息
-	fmt.Printf("║ %-20s %-43s ║\n", "Python版本:", truncateString(info.Python.Version, 43))
-	fmt.Printf("║ %-20s %-43s ║\n", "Python路径:", truncateString(info.Python.Path, 43))
+	fmt.Printf("║ %s %s ║\n", padRight("Python版本:", 20), padRight(info.Python.Version, 43))
+	fmt.Printf("║ %s %s ║\n", padRight("Python路径:", 20), padRight(info.Python.Path, 43))
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
 
 	// Java信息
-	fmt.Printf("║ %-20s %-43s ║\n", "Java版本:", truncateString(info.Java.Version, 43))
-	fmt.Printf("║ %-20s %-43s ║\n", "Java路径:", truncateString(info.Java.Path, 43))
+	fmt.Printf("║ %s %s ║\n", padRight("Java版本:", 20), padRight(info.Java.Version, 43))
+	fmt.Printf("║ %s %s ║\n", padRight("Java路径:", 20), padRight(info.Java.Path, 43))
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
 
 	// 内核模块信息
-	fmt.Printf("║ %-20s %-43s ║\n", "内核模块状态:", truncateString(info.KernelModules.Message, 43))
-	// 如果消息太长，换行显示
-	if len(info.KernelModules.Message) > 43 {
-		remaining := info.KernelModules.Message[43:]
-		for len(remaining) > 0 {
-			if len(remaining) > 43 {
-				fmt.Printf("║ %-20s %-43s ║\n", "", truncateString(remaining[:43], 43))
-				remaining = remaining[43:]
-			} else {
-				fmt.Printf("║ %-20s %-43s ║\n", "", remaining)
-				break
-			}
+	messages := strings.Split(info.KernelModules.Message, ", ")
+	for i, msg := range messages {
+		if i == 0 {
+			fmt.Printf("║ %s %s ║\n", padRight("内核模块状态:", 20), padRight(msg, 43))
+		} else {
+			fmt.Printf("║ %s %s ║\n", padRight("", 20), padRight(msg, 43))
 		}
 	}
 
 	fmt.Println("╚════════════════════════════════════════════════════════════════╝")
 }
 
-// 截断字符串
+// 截断字符串（正确处理UTF-8字符）
 func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
-	return s[:maxLen-3] + "..."
+	return string(runes[:maxLen-3]) + "..."
+}
+
+// 计算字符串显示宽度（考虑中文字符）
+func displayWidth(s string) int {
+	width := 0
+	for _, r := range s {
+		if r >= 0x4E00 && r <= 0x9FFF {
+			// 中文字符占2个宽度
+			width += 2
+		} else {
+			width += 1
+		}
+	}
+	return width
+}
+
+// 按显示宽度截断字符串
+func truncateByWidth(s string, maxWidth int) string {
+	if displayWidth(s) <= maxWidth {
+		return s
+	}
+
+	runes := []rune(s)
+	width := 0
+	cutIndex := 0
+
+	for i, r := range runes {
+		if r >= 0x4E00 && r <= 0x9FFF {
+			width += 2
+		} else {
+			width += 1
+		}
+
+		if width > maxWidth-3 {
+			cutIndex = i
+			break
+		}
+	}
+
+	if cutIndex == 0 {
+		cutIndex = len(runes)
+	}
+
+	return string(runes[:cutIndex]) + "..."
 }
 
 func main() {
