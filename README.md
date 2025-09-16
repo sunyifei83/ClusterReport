@@ -52,6 +52,7 @@ devops-toolkit/
 │   ├── BestPractices.md
 │   ├── ToolsDocumentation.md
 │   ├── UserGuide.md
+│   ├── img/
 │   └── tools/
 │          ├── go
 │          │    └──xxx.md
