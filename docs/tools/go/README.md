@@ -63,6 +63,25 @@ docconverter -i README.md -o readme.pdf
 docconverter -i https://example.com/docs/ -o docs.pdf --max-depth 3
 ```
 
+### 4. [ClusterReport](./ClusterReport_Design.md) - 集群综合报告生成工具（规划中）
+**版本**: 1.0.0（设计阶段）  
+**功能**: 汇总多个工具输出，生成专业的集群环境综合报告  
+**特色**:
+- 整合NodeProbe、PerfSnap等工具数据
+- 生成硬件配置、性能基准、验证结果报告
+- 支持HTML、PDF、Excel多种输出格式
+- 提供优化建议和问题诊断
+
+**计划使用**:
+```bash
+# 收集集群数据并生成报告
+clusterreport collect --nodes node1,node2,node3
+clusterreport generate --type acceptance --output cluster_report.pdf
+
+# 性能基准测试报告
+clusterreport benchmark --nodes all --tests cpu,memory,disk,network
+```
+
 ## 工具对比
 
 | 工具 | 用途 | 数据类型 | 执行频率 | 需要Root |
@@ -70,6 +89,7 @@ docconverter -i https://example.com/docs/ -o docs.pdf --max-depth 3
 | NodeProbe | 硬件配置采集 | 静态信息 | 低频 | 推荐 |
 | PerfSnap | 性能监控分析 | 动态数据 | 高频 | 推荐 |
 | DocConverter | 文档处理 | 文件转换 | 按需 | 否 |
+| ClusterReport | 综合报告生成 | 汇总分析 | 定期 | 否 |
 
 ## 安装指南
 
@@ -141,6 +161,11 @@ sudo apt-get install -y ghostscript  # Ubuntu/Debian
 #!/bin/bash
 # 完整的服务器检查流程
 
+# 方式1：使用ClusterReport（推荐，开发中）
+clusterreport collect --nodes server1
+clusterreport generate --type acceptance --output server_acceptance.pdf
+
+# 方式2：手动集成现有工具
 # 1. 收集配置信息
 sudo nodeprobe -format json -output config.json
 
@@ -181,6 +206,11 @@ sudo perfsnap -m -interval 1 -duration 300
 #!/bin/bash
 # 批量收集服务器信息
 
+# 方式1：使用ClusterReport（推荐，开发中）
+clusterreport collect --nodes server1,server2,server3 --parallel 3
+clusterreport generate --type inspection --format html,pdf,excel
+
+# 方式2：手动批量处理
 SERVERS="server1 server2 server3"
 DATE=$(date +%Y%m%d)
 
@@ -352,6 +382,7 @@ done
 | NodeProbe | 1.1.1 | 2025-09-15 | 修复内存插槽显示 |
 | PerfSnap | 1.1.0 | 2025-09-15 | 新增火焰图功能 |
 | DocConverter | 1.1.0 | 2025-09-18 | 新增图片下载功能 |
+| ClusterReport | 设计中 | 2025-09-19 | 初始设计文档 |
 
 ## 贡献指南
 
