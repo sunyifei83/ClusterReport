@@ -1,0 +1,174 @@
+# ClusterReport 配置文件
+# 集群配置
+clusters:
+  - name: production
+    nodes:
+      - 192.168.1.10
+      - 192.168.1.11
+      - 192.168.1.12
+    username: admin
+    ssh_key: ~/.ssh/id_rsa
+    port: 22
+    tags:
+      - production
+      - critical
+  
+  - name: staging
+    nodes:
+      - 192.168.2.10
+      - 192.168.2.11
+    username: admin
+    ssh_key: ~/.ssh/id_rsa
+    port: 22
+    tags:
+      - staging
+      - test
+
+# 输出配置
+output:
+  directory: ./reports
+  formats:
+    - html
+    - pdf
+    - markdown
+  template: default
+
+# 调度配置
+schedule:
+  enabled: false
+  cron: "0 0 * * *"  # 每天午夜执行
+  timezone: "Asia/Shanghai"
+
+# 存储配置
+storage:
+  type: file  # file, postgres, mongodb
+  settings:
+    path: ./data
+    retention_days: 30
+
+# 插件配置
+plugins:
+  directory: ./plugins
+  auto_load: true
+  enabled:
+    - nodeprobe
+    - perfsnap
+    - custom
+
+# 采集器配置
+collectors:
+  nodeprobe:
+    enabled: true
+    timeout: 60s
+    retry: 3
+  
+  perfsnap:
+    enabled: true
+    timeout: 120s
+    retry: 3
+  
+  custom:
+    enabled: false
+    command: "echo 'custom data'"
+    timeout: 30s
+
+# 分析器配置
+analyzers:
+  config:
+    enabled: true
+    thresholds:
+      min_memory: 8589934592  # 8GB in bytes
+      min_cpu: 4
+      min_disk: 107374182400  # 100GB in bytes
+  
+  performance:
+    enabled: true
+    thresholds:
+      cpu_usage: 80.0
+      memory_usage: 85.0
+      disk_usage: 90.0
+      load_average: 2.0
+  
+  anomaly:
+    enabled: true
+    sensitivity: 2.0
+    window: 10
+
+# 报告生成器配置
+generators:
+  html:
+    enabled: true
+    template: default
+    include_charts: true
+    include_raw_data: false
+  
+  pdf:
+    enabled: true
+    template: default
+    page_size: A4
+    orientation: portrait
+  
+  markdown:
+    enabled: true
+    include_toc: true
+    include_links: true
+  
+  excel:
+    enabled: false
+    include_charts: true
+    separate_sheets: true
+
+# 通知配置
+notifications:
+  email:
+    enabled: false
+    smtp_host: smtp.example.com
+    smtp_port: 587
+    username: notifications@example.com
+    password: ""
+    from: "ClusterReport <notifications@example.com>"
+    to:
+      - admin@example.com
+      - ops@example.com
+    on_success: false
+    on_failure: true
+  
+  webhook:
+    enabled: false
+    url: https://hooks.example.com/cluster-report
+    method: POST
+    headers:
+      Content-Type: application/json
+      Authorization: Bearer token
+    on_success: true
+    on_failure: true
+
+# 日志配置
+logging:
+  level: info  # debug, info, warn, error
+  format: json  # text, json
+  output: stdout  # stdout, file
+  file_path: ./logs/clusterreport.log
+  max_size: 100  # MB
+  max_backups: 7
+  max_age: 30  # days
+
+# 性能配置
+performance:
+  parallel_workers: 10
+  collection_timeout: 5m
+  analysis_timeout: 10m
+  generation_timeout: 5m
+  max_retries: 3
+  retry_delay: 10s
+
+# 安全配置
+security:
+  enable_tls: false
+  cert_file: ""
+  key_file: ""
+  ca_file: ""
+  verify_ssl: true
+  allowed_ips: []
+  auth_enabled: false
+  auth_token: ""
