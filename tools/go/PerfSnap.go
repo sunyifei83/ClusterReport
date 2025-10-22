@@ -3,10 +3,11 @@ PerfSnap - Linux服务器性能快照分析工具
 快速采集和分析系统性能数据，包括CPU、内存、磁盘、网络等关键指标
 支持生成高CPU进程的火焰图进行性能分析
 Author: sunyifei83@gmail.com
-Version: 1.1.0
+Version: 1.1.1
 Tips:
 - PerfSnap需要系统安装sysstat包（提供sar、mpstat、pidstat、iostat等命令）
 - 火焰图功能需要安装perf工具和FlameGraph工具包
+- v1.1.1修复了磁盘IO统计字段解析错误，利用率现在正确显示0-100%
 使用:
 1. go build -o perfsnap PerfSnap.go
 2. chmod +x perfsnap
@@ -333,7 +334,9 @@ func getIOStat() IOStatInfo {
 
 			if inDeviceSection && line != "" && !strings.Contains(line, "avg-cpu:") {
 				fields := strings.Fields(line)
-				if len(fields) >= 14 {
+				// iostat -xz 输出格式:
+				// Device r/s w/s rkB/s wkB/s rrqm/s wrqm/s %rrqm %wrqm r_await w_await aqu-sz rareq-sz wareq-sz svctm %util
+				if len(fields) >= 16 {
 					dev := DeviceIO{
 						Device: fields[0],
 					}
@@ -341,10 +344,17 @@ func getIOStat() IOStatInfo {
 					dev.WRPS, _ = strconv.ParseFloat(fields[2], 64)
 					dev.RkBPS, _ = strconv.ParseFloat(fields[3], 64)
 					dev.WkBPS, _ = strconv.ParseFloat(fields[4], 64)
-					dev.AvgQueue, _ = strconv.ParseFloat(fields[8], 64)
-					dev.AvgWait, _ = strconv.ParseFloat(fields[9], 64)
-					dev.SvcTime, _ = strconv.ParseFloat(fields[12], 64)
-					dev.Util, _ = strconv.ParseFloat(fields[13], 64)
+					dev.AvgQueue, _ = strconv.ParseFloat(fields[11], 64) // aqu-sz
+
+					// 计算平均等待时间 (读写等待时间的加权平均)
+					rAwait, _ := strconv.ParseFloat(fields[9], 64)  // r_await
+					wAwait, _ := strconv.ParseFloat(fields[10], 64) // w_await
+					if dev.RRPS+dev.WRPS > 0 {
+						dev.AvgWait = (rAwait*dev.RRPS + wAwait*dev.WRPS) / (dev.RRPS + dev.WRPS)
+					}
+
+					dev.SvcTime, _ = strconv.ParseFloat(fields[14], 64) // svctm
+					dev.Util, _ = strconv.ParseFloat(fields[15], 64)    // %util
 
 					// 只显示有活动的设备
 					if dev.RRPS > 0 || dev.WRPS > 0 || dev.Util > 0 {
@@ -1217,14 +1227,15 @@ func main() {
 
 	// 显示版本信息
 	if *version {
-		fmt.Println("PerfSnap v1.1.0")
+		fmt.Println("PerfSnap v1.1.1")
 		fmt.Println("支持火焰图生成功能")
+		fmt.Println("修复磁盘IO统计字段解析问题")
 		os.Exit(0)
 	}
 
 	// 显示帮助信息
 	if *helpFlag || *helpFlag2 {
-		fmt.Println("PerfSnap v1.1.0 - Linux系统性能快照分析工具")
+		fmt.Println("PerfSnap v1.1.1 - Linux系统性能快照分析工具")
 		fmt.Println("\n用法:")
 		fmt.Println("  perfsnap [选项]")
 		fmt.Println("\n基础选项:")
