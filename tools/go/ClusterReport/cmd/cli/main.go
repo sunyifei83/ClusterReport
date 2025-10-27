@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -88,42 +87,14 @@ type Storage interface {
 	Load(ctx context.Context, key string) ([]byte, error)
 }
 
+// app 全局应用实例
+var app *Application
+
 func main() {
-	if err := Execute(); err != nil {
-		log.Fatal(err)
-		os.Exit(1)
-	}
-}
+	// 初始化应用
+	app = &Application{}
 
-// Execute 执行主程序
-func Execute() error {
-	app := &Application{}
-
-	rootCmd := &cobra.Command{
-		Use:   "clusterreport",
-		Short: "Cluster comprehensive report generator",
-		Long: `ClusterReport is a comprehensive cluster analysis and reporting tool.
-It collects data from multiple nodes, analyzes the information, 
-and generates detailed reports in various formats.`,
-		Version: "0.1.0",
-	}
-
-	// 添加全局标志
-	rootCmd.PersistentFlags().StringP("config", "c", "config.yaml", "config file path")
-	rootCmd.PersistentFlags().StringP("log-level", "l", "info", "log level (debug, info, warn, error)")
-	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
-
-	// 绑定配置
-	viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
-	viper.BindPFlag("log_level", rootCmd.PersistentFlags().Lookup("log-level"))
-	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
-
-	// 初始化配置
-	cobra.OnInitialize(func() {
-		app.initConfig()
-	})
-
-	// 添加子命令
+	// 添加所有子命令到根命令
 	rootCmd.AddCommand(
 		app.collectCommand(),
 		app.analyzeCommand(),
@@ -134,34 +105,12 @@ and generates detailed reports in various formats.`,
 		app.versionCommand(),
 	)
 
-	return rootCmd.Execute()
+	// 执行根命令
+	Execute()
 }
 
-// initConfig 初始化配置
-func (app *Application) initConfig() {
-	configFile := viper.GetString("config")
-
-	if configFile != "" {
-		viper.SetConfigFile(configFile)
-	} else {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		viper.AddConfigPath(home)
-		viper.AddConfigPath(".")
-		viper.SetConfigName("clusterreport")
-		viper.SetConfigType("yaml")
-	}
-
-	viper.AutomaticEnv()
-	viper.SetEnvPrefix("CLUSTERREPORT")
-
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
-	}
-
+// initAppConfig 初始化应用配置（被根命令的 initConfig 调用）
+func initAppConfig() {
 	// 解析配置到结构体
 	app.Config = &Config{}
 	if err := viper.Unmarshal(app.Config); err != nil {
