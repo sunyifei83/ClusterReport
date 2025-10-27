@@ -371,4 +371,4 @@ echo -e
 rm -rf $YABS_PATH
 # reset locale settings
 unset LC_ALL
-rm iotest.sh
+# Note: Script cleanup removed - script will persist after execution

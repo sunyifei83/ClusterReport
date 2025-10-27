@@ -1,0 +1,266 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  # Go 工具测试和构建
+  go-tools:
+    name: Build and Test Go Tools
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.19', '1.20', '1.21']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go-version }}
+    
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-${{ matrix.go-version }}-
+    
+    - name: Install dependencies
+      run: |
+        cd tools/go
+        go mod download
+        go mod verify
+    
+    - name: Run go vet
+      run: |
+        cd tools/go
+        go vet ./...
+    
+    - name: Run go fmt check
+      run: |
+        cd tools/go
+        if [ -n "$(gofmt -l .)" ]; then
+          echo "Go code is not formatted:"
+          gofmt -d .
+          exit 1
+        fi
+    
+    - name: Build NodeProbe
+      run: |
+        cd tools/go
+        go build -v -o nodeprobe NodeProbe.go
+    
+    - name: Build PerfSnap
+      run: |
+        cd tools/go
+        go build -v -o perfsnap PerfSnap.go
+    
+    - name: Build DocConverter
+      run: |
+        cd tools/go
+        go build -v -o docconverter DocConverter.go
+    
+    - name: Upload artifacts
+      if: matrix.go-version == '1.21'
+      uses: actions/upload-artifact@v3
+      with:
+        name: go-tools
+        path: |
+          tools/go/nodeprobe
+          tools/go/perfsnap
+          tools/go/docconverter
+        retention-days: 7
+
+  # Shell 脚本检查
+  shell-scripts:
+    name: Lint Shell Scripts
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Install ShellCheck
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y shellcheck
+    
+    - name: Run ShellCheck
+      run: |
+        find tools/shell -name "*.sh" -type f -exec shellcheck -x {} +
+      continue-on-error: true
+    
+    - name: Check script permissions
+      run: |
+        cd tools/shell
+        for script in *.sh; do
+          if [ ! -x "$script" ]; then
+            echo "Warning: $script is not executable"
+          fi
+        done
+
+  # 文档检查
+  docs-check:
+    name: Check Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Check for broken links
+      uses: gaurav-nelson/github-action-markdown-link-check@v1
+      with:
+        use-quiet-mode: 'yes'
+        config-file: '.github/markdown-link-check-config.json'
+      continue-on-error: true
+    
+    - name: Check Markdown format
+      run: |
+        sudo npm install -g markdownlint-cli
+        markdownlint '**/*.md' --ignore node_modules --ignore vendor
+      continue-on-error: true
+    
+    - name: Verify required docs exist
+      run: |
+        required_docs=(
+          "README.md"
+          "README-zh.md"
+          "LICENSE"
+          "CONTRIBUTING.md"
+          "CODE_OF_CONDUCT.md"
+          "CHANGELOG.md"
+          "docs/UserGuide.md"
+          "docs/BestPractices.md"
+          "docs/ToolsDocumentation.md"
+        )
+        
+        for doc in "${required_docs[@]}"; do
+          if [ ! -f "$doc" ]; then
+            echo "❌ Missing required document: $doc"
+            exit 1
+          else
+            echo "✅ Found: $doc"
+          fi
+        done
+
+  # ClusterReport 项目检查
+  cluster-report:
+    name: Build ClusterReport
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    
+    - name: Build ClusterReport CLI
+      run: |
+        cd tools/go/ClusterReport
+        go mod download
+        go build -v -o clusterreport cmd/cli/main.go
+    
+    - name: Verify ClusterReport structure
+      run: |
+        cd tools/go/ClusterReport
+        required_dirs=(
+          "cmd/cli"
+          "cmd/server"
+          "cmd/agent"
+          "pkg/collector"
+          "pkg/analyzer"
+          "pkg/generator"
+          "plugins"
+        )
+        
+        for dir in "${required_dirs[@]}"; do
+          if [ ! -d "$dir" ]; then
+            echo "⚠️  Directory not found: $dir"
+          else
+            echo "✅ Found: $dir"
+          fi
+        done
+
+  # 项目结构验证
+  project-structure:
+    name: Verify Project Structure
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Check directory structure
+      run: |
+        required_dirs=(
+          "tools/go"
+          "tools/shell"
+          "tools/python"
+          "scripts"
+          "configs"
+          "docs"
+          "playbooks"
+          "tests"
+          ".github/ISSUE_TEMPLATE"
+          ".github/workflows"
+        )
+        
+        for dir in "${required_dirs[@]}"; do
+          if [ ! -d "$dir" ]; then
+            echo "⚠️  Directory not found: $dir"
+          else
+            echo "✅ Found: $dir"
+          fi
+        done
+    
+    - name: Check .gitignore
+      run: |
+        if [ -f ".gitignore" ]; then
+          echo "✅ .gitignore exists"
+          echo "Ignored patterns:"
+          cat .gitignore
+        else
+          echo "❌ .gitignore not found"
+          exit 1
+        fi
+
+  # 综合报告
+  summary:
+    name: Build Summary
+    needs: [go-tools, shell-scripts, docs-check, cluster-report, project-structure]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Generate summary
+      run: |
+        echo "# CI/CD Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Job Results" >> $GITHUB_STEP_SUMMARY
+        echo "- Go Tools: ${{ needs.go-tools.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Shell Scripts: ${{ needs.shell-scripts.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Documentation: ${{ needs.docs-check.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- ClusterReport: ${{ needs.cluster-report.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Project Structure: ${{ needs.project-structure.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Build Info" >> $GITHUB_STEP_SUMMARY
+        echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Author: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY

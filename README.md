@@ -28,10 +28,10 @@ cd devops-toolkit
 
 ## 📚 Documentation
 
-[User Guide](/docs/UserGuide.md)
-[Contributing Guide](/docs/ContributingGuide.md)
-[Best Practices](/docs/BestPractices.md)
-[Tools Documentation](/docs/ToolsDocumentation.md)
+- [User Guide](/docs/UserGuide.md)
+- [Contributing Guide](CONTRIBUTING.md)
+- [Best Practices](/docs/BestPractices.md)
+- [Tools Documentation](/docs/ToolsDocumentation.md)
 
 ## 🗂️ Project Structure
 ```bash
