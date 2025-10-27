@@ -1,655 +1,296 @@
 package analyzer
 
 import (
-	"context"
 	"fmt"
 	"math"
-	"sort"
-	"sync"
 	"time"
 
 	"github.com/devops-toolkit/clusterreport/pkg/collector"
 )
 
-// AnalysisType 分析类型
-type AnalysisType string
-
-const (
-	AnalysisTypeConfig      AnalysisType = "config"
-	AnalysisTypePerformance AnalysisType = "performance"
-	AnalysisTypeAnomaly     AnalysisType = "anomaly"
-	AnalysisTypeTrend       AnalysisType = "trend"
-	AnalysisTypeComparison  AnalysisType = "comparison"
-)
-
-// Analysis 分析结果
-type Analysis struct {
-	Type            AnalysisType           `json:"type"`
-	Timestamp       time.Time              `json:"timestamp"`
-	Results         map[string]interface{} `json:"results"`
-	Insights        []Insight              `json:"insights"`
-	Recommendations []Recommendation       `json:"recommendations"`
-	Score           float64                `json:"score"`
-}
-
-// Insight 洞察
-type Insight struct {
-	Level       string                 `json:"level"` // info, warning, critical
-	Category    string                 `json:"category"`
-	Description string                 `json:"description"`
-	Details     map[string]interface{} `json:"details"`
-	Timestamp   time.Time              `json:"timestamp"`
-}
-
-// Recommendation 建议
-type Recommendation struct {
-	Priority  int       `json:"priority"` // 1-5, 1最高
-	Category  string    `json:"category"`
-	Action    string    `json:"action"`
-	Reason    string    `json:"reason"`
-	Impact    string    `json:"impact"`
-	Effort    string    `json:"effort"` // low, medium, high
-	Timestamp time.Time `json:"timestamp"`
-}
-
 // Analyzer 分析器接口
 type Analyzer interface {
-	// Analyze 分析数据
-	Analyze(ctx context.Context, data []collector.Data) (*Analysis, error)
-
-	// Type 分析类型
-	Type() AnalysisType
-
-	// Options 配置选项
-	Options() map[string]interface{}
+	Analyze(data interface{}) (*AnalysisResult, error)
+	Name() string
 }
 
-// Registry 分析器注册表
-type Registry struct {
-	analyzers map[AnalysisType]Analyzer
-	mu        sync.RWMutex
+// AnalysisResult 分析结果
+type AnalysisResult struct {
+	Timestamp   time.Time              `json:"timestamp"`
+	Analyzer    string                 `json:"analyzer"`
+	Status      string                 `json:"status"` // healthy, warning, critical
+	Score       float64                `json:"score"`  // 0-100
+	Issues      []Issue                `json:"issues"`
+	Metrics     map[string]interface{} `json:"metrics"`
+	Suggestions []string               `json:"suggestions"`
 }
 
-// NewRegistry 创建新的注册表
-func NewRegistry() *Registry {
-	return &Registry{
-		analyzers: make(map[AnalysisType]Analyzer),
+// Issue 问题描述
+type Issue struct {
+	Severity    string `json:"severity"` // low, medium, high, critical
+	Category    string `json:"category"` // cpu, memory, disk, network, etc.
+	Description string `json:"description"`
+	Value       string `json:"value"`
+	Threshold   string `json:"threshold"`
+}
+
+// BaseAnalyzer 基础分析器
+type BaseAnalyzer struct {
+	name   string
+	config AnalyzerConfig
+}
+
+// AnalyzerConfig 分析器配置
+type AnalyzerConfig struct {
+	// CPU 阈值
+	CPUWarningThreshold  float64 `yaml:"cpu_warning_threshold"`
+	CPUCriticalThreshold float64 `yaml:"cpu_critical_threshold"`
+
+	// 内存阈值
+	MemoryWarningThreshold  float64 `yaml:"memory_warning_threshold"`
+	MemoryCriticalThreshold float64 `yaml:"memory_critical_threshold"`
+
+	// 磁盘阈值
+	DiskWarningThreshold  float64 `yaml:"disk_warning_threshold"`
+	DiskCriticalThreshold float64 `yaml:"disk_critical_threshold"`
+
+	// Load Average 阈值（相对于 CPU 核心数）
+	LoadAvgWarningMultiplier  float64 `yaml:"load_avg_warning_multiplier"`
+	LoadAvgCriticalMultiplier float64 `yaml:"load_avg_critical_multiplier"`
+}
+
+// DefaultAnalyzerConfig 默认配置
+func DefaultAnalyzerConfig() AnalyzerConfig {
+	return AnalyzerConfig{
+		CPUWarningThreshold:       70.0,
+		CPUCriticalThreshold:      90.0,
+		MemoryWarningThreshold:    80.0,
+		MemoryCriticalThreshold:   95.0,
+		DiskWarningThreshold:      80.0,
+		DiskCriticalThreshold:     90.0,
+		LoadAvgWarningMultiplier:  0.7,
+		LoadAvgCriticalMultiplier: 1.0,
 	}
 }
 
-// Register 注册分析器
-func (r *Registry) Register(analyzer Analyzer) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	aType := analyzer.Type()
-	if _, exists := r.analyzers[aType]; exists {
-		return fmt.Errorf("analyzer %s already registered", aType)
-	}
-
-	r.analyzers[aType] = analyzer
-	return nil
-}
-
-// Get 获取分析器
-func (r *Registry) Get(aType AnalysisType) (Analyzer, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	analyzer, exists := r.analyzers[aType]
-	if !exists {
-		return nil, fmt.Errorf("analyzer %s not found", aType)
-	}
-
-	return analyzer, nil
-}
-
-// Chain 分析链
-type Chain struct {
-	analyzers []Analyzer
-	options   map[string]interface{}
-}
-
-// NewChain 创建分析链
-func NewChain(analyzers ...Analyzer) *Chain {
-	return &Chain{
-		analyzers: analyzers,
-		options:   make(map[string]interface{}),
+// NewBaseAnalyzer 创建基础分析器
+func NewBaseAnalyzer(name string, config AnalyzerConfig) *BaseAnalyzer {
+	return &BaseAnalyzer{
+		name:   name,
+		config: config,
 	}
 }
 
-// Process 处理数据
-func (c *Chain) Process(ctx context.Context, data []collector.Data) (*Report, error) {
-	report := &Report{
-		Timestamp: time.Now(),
-		Analyses:  make([]*Analysis, 0),
-		Data:      data,
+// Name 返回分析器名称
+func (ba *BaseAnalyzer) Name() string {
+	return ba.name
+}
+
+// Analyze 实现基础分析逻辑
+func (ba *BaseAnalyzer) Analyze(data interface{}) (*AnalysisResult, error) {
+	metrics, ok := data.(*collector.SystemMetrics)
+	if !ok {
+		return nil, fmt.Errorf("invalid data type, expected *collector.SystemMetrics")
 	}
 
-	// 执行所有分析器
-	for _, analyzer := range c.analyzers {
-		analysis, err := analyzer.Analyze(ctx, data)
-		if err != nil {
-			// 记录错误但继续
-			fmt.Printf("Analyzer %s failed: %v\n", analyzer.Type(), err)
-			continue
-		}
-		report.Analyses = append(report.Analyses, analysis)
+	result := &AnalysisResult{
+		Timestamp:   time.Now(),
+		Analyzer:    ba.name,
+		Status:      "healthy",
+		Score:       100.0,
+		Issues:      []Issue{},
+		Metrics:     make(map[string]interface{}),
+		Suggestions: []string{},
 	}
 
-	// 计算总体评分
-	report.calculateOverallScore()
+	// 分析 CPU
+	ba.analyzeCPU(metrics, result)
 
-	return report, nil
+	// 分析内存
+	ba.analyzeMemory(metrics, result)
+
+	// 分析磁盘
+	ba.analyzeDisk(metrics, result)
+
+	// 分析 Load Average
+	ba.analyzeLoadAvg(metrics, result)
+
+	// 计算总体评分和状态
+	ba.calculateOverallStatus(result)
+
+	return result, nil
 }
 
-// Report 分析报告
-type Report struct {
-	Timestamp    time.Time              `json:"timestamp"`
-	Analyses     []*Analysis            `json:"analyses"`
-	Data         []collector.Data       `json:"data"`
-	OverallScore float64                `json:"overall_score"`
-	Summary      map[string]interface{} `json:"summary"`
-}
+// analyzeCPU 分析 CPU 使用情况
+func (ba *BaseAnalyzer) analyzeCPU(metrics *collector.SystemMetrics, result *AnalysisResult) {
+	cpuUsage := metrics.CPU.Usage
 
-// calculateOverallScore 计算总体评分
-func (r *Report) calculateOverallScore() {
-	if len(r.Analyses) == 0 {
-		r.OverallScore = 0
-		return
+	result.Metrics["cpu_usage"] = cpuUsage
+	result.Metrics["cpu_cores"] = metrics.CPU.Cores
+
+	if cpuUsage >= ba.config.CPUCriticalThreshold {
+		result.Issues = append(result.Issues, Issue{
+			Severity:    "critical",
+			Category:    "cpu",
+			Description: "CPU 使用率过高",
+			Value:       fmt.Sprintf("%.2f%%", cpuUsage),
+			Threshold:   fmt.Sprintf("%.2f%%", ba.config.CPUCriticalThreshold),
+		})
+		result.Score -= 30
+		result.Suggestions = append(result.Suggestions, "检查 CPU 密集型进程，考虑优化或扩容")
+	} else if cpuUsage >= ba.config.CPUWarningThreshold {
+		result.Issues = append(result.Issues, Issue{
+			Severity:    "warning",
+			Category:    "cpu",
+			Description: "CPU 使用率偏高",
+			Value:       fmt.Sprintf("%.2f%%", cpuUsage),
+			Threshold:   fmt.Sprintf("%.2f%%", ba.config.CPUWarningThreshold),
+		})
+		result.Score -= 15
+		result.Suggestions = append(result.Suggestions, "监控 CPU 使用趋势，准备扩容计划")
 	}
+}
 
-	totalScore := 0.0
-	for _, analysis := range r.Analyses {
-		totalScore += analysis.Score
+// analyzeMemory 分析内存使用情况
+func (ba *BaseAnalyzer) analyzeMemory(metrics *collector.SystemMetrics, result *AnalysisResult) {
+	memUsage := metrics.Memory.UsedPercent
+
+	result.Metrics["memory_usage_percent"] = memUsage
+	result.Metrics["memory_total"] = metrics.Memory.Total
+	result.Metrics["memory_available"] = metrics.Memory.Available
+
+	if memUsage >= ba.config.MemoryCriticalThreshold {
+		result.Issues = append(result.Issues, Issue{
+			Severity:    "critical",
+			Category:    "memory",
+			Description: "内存使用率严重过高",
+			Value:       fmt.Sprintf("%.2f%%", memUsage),
+			Threshold:   fmt.Sprintf("%.2f%%", ba.config.MemoryCriticalThreshold),
+		})
+		result.Score -= 30
+		result.Suggestions = append(result.Suggestions, "立即检查内存泄漏，清理缓存或增加内存")
+	} else if memUsage >= ba.config.MemoryWarningThreshold {
+		result.Issues = append(result.Issues, Issue{
+			Severity:    "warning",
+			Category:    "memory",
+			Description: "内存使用率偏高",
+			Value:       fmt.Sprintf("%.2f%%", memUsage),
+			Threshold:   fmt.Sprintf("%.2f%%", ba.config.MemoryWarningThreshold),
+		})
+		result.Score -= 15
+		result.Suggestions = append(result.Suggestions, "关注内存使用趋势，优化应用内存占用")
 	}
-
-	r.OverallScore = totalScore / float64(len(r.Analyses))
 }
 
-// ConfigAnalyzer 配置分析器
-type ConfigAnalyzer struct {
-	threshold map[string]interface{}
-}
+// analyzeDisk 分析磁盘使用情况
+func (ba *BaseAnalyzer) analyzeDisk(metrics *collector.SystemMetrics, result *AnalysisResult) {
+	for _, disk := range metrics.Disk {
+		diskUsage := disk.UsedPercent
 
-// NewConfigAnalyzer 创建配置分析器
-func NewConfigAnalyzer() *ConfigAnalyzer {
-	return &ConfigAnalyzer{
-		threshold: map[string]interface{}{
-			"min_memory": 8 * 1024 * 1024 * 1024, // 8GB
-			"min_cpu":    4,
-			"min_disk":   100 * 1024 * 1024 * 1024, // 100GB
-		},
-	}
-}
+		metricKey := fmt.Sprintf("disk_usage_%s", disk.Mountpoint)
+		result.Metrics[metricKey] = diskUsage
 
-// Type 返回分析类型
-func (a *ConfigAnalyzer) Type() AnalysisType {
-	return AnalysisTypeConfig
-}
-
-// Options 返回配置选项
-func (a *ConfigAnalyzer) Options() map[string]interface{} {
-	return a.threshold
-}
-
-// Analyze 分析配置
-func (a *ConfigAnalyzer) Analyze(ctx context.Context, data []collector.Data) (*Analysis, error) {
-	analysis := &Analysis{
-		Type:            AnalysisTypeConfig,
-		Timestamp:       time.Now(),
-		Results:         make(map[string]interface{}),
-		Insights:        make([]Insight, 0),
-		Recommendations: make([]Recommendation, 0),
-	}
-
-	// 分析每个节点的配置
-	nodeConfigs := make([]map[string]interface{}, 0)
-	for _, d := range data {
-		if d.Type == collector.DataTypeHardware {
-			nodeConfigs = append(nodeConfigs, d.Metrics)
-
-			// 检查配置是否满足最低要求
-			a.checkNodeConfig(d.Node, d.Metrics, analysis)
-		}
-	}
-
-	// 检查配置一致性
-	a.checkConfigConsistency(nodeConfigs, analysis)
-
-	// 计算评分
-	analysis.Score = a.calculateScore(analysis)
-
-	return analysis, nil
-}
-
-// checkNodeConfig 检查节点配置
-func (a *ConfigAnalyzer) checkNodeConfig(node string, config map[string]interface{}, analysis *Analysis) {
-	// 检查内存
-	if memory, ok := config["memory"].(float64); ok {
-		minMemory := a.threshold["min_memory"].(int)
-		if memory < float64(minMemory) {
-			analysis.Insights = append(analysis.Insights, Insight{
-				Level:       "warning",
-				Category:    "hardware",
-				Description: fmt.Sprintf("Node %s has insufficient memory", node),
-				Details: map[string]interface{}{
-					"current":  memory,
-					"required": minMemory,
-				},
-				Timestamp: time.Now(),
+		if diskUsage >= ba.config.DiskCriticalThreshold {
+			result.Issues = append(result.Issues, Issue{
+				Severity:    "critical",
+				Category:    "disk",
+				Description: fmt.Sprintf("磁盘 %s 使用率严重过高", disk.Mountpoint),
+				Value:       fmt.Sprintf("%.2f%%", diskUsage),
+				Threshold:   fmt.Sprintf("%.2f%%", ba.config.DiskCriticalThreshold),
 			})
-
-			analysis.Recommendations = append(analysis.Recommendations, Recommendation{
-				Priority:  2,
-				Category:  "hardware",
-				Action:    fmt.Sprintf("Upgrade memory on node %s", node),
-				Reason:    "Current memory is below recommended minimum",
-				Impact:    "Improved performance and stability",
-				Effort:    "medium",
-				Timestamp: time.Now(),
+			result.Score -= 20
+			result.Suggestions = append(result.Suggestions,
+				fmt.Sprintf("清理 %s 上的日志和临时文件，或扩展磁盘空间", disk.Mountpoint))
+		} else if diskUsage >= ba.config.DiskWarningThreshold {
+			result.Issues = append(result.Issues, Issue{
+				Severity:    "warning",
+				Category:    "disk",
+				Description: fmt.Sprintf("磁盘 %s 使用率偏高", disk.Mountpoint),
+				Value:       fmt.Sprintf("%.2f%%", diskUsage),
+				Threshold:   fmt.Sprintf("%.2f%%", ba.config.DiskWarningThreshold),
 			})
-		}
-	}
-
-	// 检查CPU
-	if cpu, ok := config["cpu_cores"].(float64); ok {
-		minCPU := a.threshold["min_cpu"].(int)
-		if cpu < float64(minCPU) {
-			analysis.Insights = append(analysis.Insights, Insight{
-				Level:       "warning",
-				Category:    "hardware",
-				Description: fmt.Sprintf("Node %s has insufficient CPU cores", node),
-				Details: map[string]interface{}{
-					"current":  cpu,
-					"required": minCPU,
-				},
-				Timestamp: time.Now(),
-			})
+			result.Score -= 10
+			result.Suggestions = append(result.Suggestions,
+				fmt.Sprintf("监控 %s 磁盘使用，计划清理策略", disk.Mountpoint))
 		}
 	}
 }
 
-// checkConfigConsistency 检查配置一致性
-func (a *ConfigAnalyzer) checkConfigConsistency(configs []map[string]interface{}, analysis *Analysis) {
-	if len(configs) < 2 {
-		return
-	}
+// analyzeLoadAvg 分析系统负载
+func (ba *BaseAnalyzer) analyzeLoadAvg(metrics *collector.SystemMetrics, result *AnalysisResult) {
+	cores := float64(metrics.CPU.Cores)
+	load1 := metrics.CPU.LoadAvg1
+	load5 := metrics.CPU.LoadAvg5
+	load15 := metrics.CPU.LoadAvg15
 
-	// 检查关键配置的一致性
-	keys := []string{"os_version", "kernel_version", "cpu_model"}
+	result.Metrics["load_avg_1"] = load1
+	result.Metrics["load_avg_5"] = load5
+	result.Metrics["load_avg_15"] = load15
+	result.Metrics["load_per_core_1"] = load1 / cores
 
-	for _, key := range keys {
-		values := make(map[string]int)
-		for _, config := range configs {
-			if val, ok := config[key].(string); ok {
-				values[val]++
-			}
-		}
+	// 使用 1 分钟负载平均值进行评估
+	loadPerCore := load1 / cores
 
-		if len(values) > 1 {
-			analysis.Insights = append(analysis.Insights, Insight{
-				Level:       "info",
-				Category:    "consistency",
-				Description: fmt.Sprintf("Inconsistent %s across nodes", key),
-				Details: map[string]interface{}{
-					"values": values,
-				},
-				Timestamp: time.Now(),
-			})
-		}
-	}
-}
+	criticalThreshold := ba.config.LoadAvgCriticalMultiplier
+	warningThreshold := ba.config.LoadAvgWarningMultiplier
 
-// calculateScore 计算评分
-func (a *ConfigAnalyzer) calculateScore(analysis *Analysis) float64 {
-	score := 100.0
-
-	// 根据洞察级别扣分
-	for _, insight := range analysis.Insights {
-		switch insight.Level {
-		case "critical":
-			score -= 20
-		case "warning":
-			score -= 10
-		case "info":
-			score -= 2
-		}
-	}
-
-	// 确保分数在0-100之间
-	if score < 0 {
-		score = 0
-	}
-
-	return score
-}
-
-// PerfAnalyzer 性能分析器
-type PerfAnalyzer struct {
-	threshold map[string]float64
-}
-
-// NewPerfAnalyzer 创建性能分析器
-func NewPerfAnalyzer() *PerfAnalyzer {
-	return &PerfAnalyzer{
-		threshold: map[string]float64{
-			"cpu_usage":    80.0,
-			"memory_usage": 85.0,
-			"disk_usage":   90.0,
-			"load_average": 2.0,
-		},
+	if loadPerCore >= criticalThreshold {
+		result.Issues = append(result.Issues, Issue{
+			Severity:    "critical",
+			Category:    "load",
+			Description: "系统负载过高",
+			Value:       fmt.Sprintf("%.2f (%.2f per core)", load1, loadPerCore),
+			Threshold:   fmt.Sprintf("%.2f per core", criticalThreshold),
+		})
+		result.Score -= 25
+		result.Suggestions = append(result.Suggestions, "系统负载严重，检查运行进程和 I/O 等待")
+	} else if loadPerCore >= warningThreshold {
+		result.Issues = append(result.Issues, Issue{
+			Severity:    "warning",
+			Category:    "load",
+			Description: "系统负载偏高",
+			Value:       fmt.Sprintf("%.2f (%.2f per core)", load1, loadPerCore),
+			Threshold:   fmt.Sprintf("%.2f per core", warningThreshold),
+		})
+		result.Score -= 10
+		result.Suggestions = append(result.Suggestions, "关注系统负载趋势")
 	}
 }
 
-// Type 返回分析类型
-func (a *PerfAnalyzer) Type() AnalysisType {
-	return AnalysisTypePerformance
-}
+// calculateOverallStatus 计算总体状态
+func (ba *BaseAnalyzer) calculateOverallStatus(result *AnalysisResult) {
+	// 确保评分在 0-100 范围内
+	result.Score = math.Max(0, math.Min(100, result.Score))
 
-// Options 返回配置选项
-func (a *PerfAnalyzer) Options() map[string]interface{} {
-	options := make(map[string]interface{})
-	for k, v := range a.threshold {
-		options[k] = v
-	}
-	return options
-}
+	// 根据问题严重程度确定状态
+	hasCritical := false
+	hasWarning := false
 
-// Analyze 分析性能
-func (a *PerfAnalyzer) Analyze(ctx context.Context, data []collector.Data) (*Analysis, error) {
-	analysis := &Analysis{
-		Type:            AnalysisTypePerformance,
-		Timestamp:       time.Now(),
-		Results:         make(map[string]interface{}),
-		Insights:        make([]Insight, 0),
-		Recommendations: make([]Recommendation, 0),
-	}
-
-	// 收集性能指标
-	perfMetrics := make(map[string][]float64)
-
-	for _, d := range data {
-		if d.Type == collector.DataTypePerformance {
-			a.analyzeNodePerformance(d.Node, d.Metrics, analysis, perfMetrics)
+	for _, issue := range result.Issues {
+		if issue.Severity == "critical" {
+			hasCritical = true
+		} else if issue.Severity == "warning" {
+			hasWarning = true
 		}
 	}
 
-	// 计算统计信息
-	a.calculateStatistics(perfMetrics, analysis)
-
-	// 计算评分
-	analysis.Score = a.calculateScore(analysis)
-
-	return analysis, nil
-}
-
-// analyzeNodePerformance 分析节点性能
-func (a *PerfAnalyzer) analyzeNodePerformance(node string, metrics map[string]interface{},
-	analysis *Analysis, perfMetrics map[string][]float64) {
-
-	// 检查CPU使用率
-	if cpuUsage, ok := metrics["cpu_usage"].(float64); ok {
-		perfMetrics["cpu_usage"] = append(perfMetrics["cpu_usage"], cpuUsage)
-
-		if cpuUsage > a.threshold["cpu_usage"] {
-			analysis.Insights = append(analysis.Insights, Insight{
-				Level:       "warning",
-				Category:    "performance",
-				Description: fmt.Sprintf("High CPU usage on node %s", node),
-				Details: map[string]interface{}{
-					"current":   cpuUsage,
-					"threshold": a.threshold["cpu_usage"],
-				},
-				Timestamp: time.Now(),
-			})
-		}
-	}
-
-	// 检查内存使用率
-	if memUsage, ok := metrics["memory_usage"].(float64); ok {
-		perfMetrics["memory_usage"] = append(perfMetrics["memory_usage"], memUsage)
-
-		if memUsage > a.threshold["memory_usage"] {
-			analysis.Insights = append(analysis.Insights, Insight{
-				Level:       "warning",
-				Category:    "performance",
-				Description: fmt.Sprintf("High memory usage on node %s", node),
-				Details: map[string]interface{}{
-					"current":   memUsage,
-					"threshold": a.threshold["memory_usage"],
-				},
-				Timestamp: time.Now(),
-			})
-
-			analysis.Recommendations = append(analysis.Recommendations, Recommendation{
-				Priority:  3,
-				Category:  "performance",
-				Action:    "Investigate memory-consuming processes",
-				Reason:    fmt.Sprintf("Memory usage %.1f%% exceeds threshold", memUsage),
-				Impact:    "Prevent out-of-memory issues",
-				Effort:    "low",
-				Timestamp: time.Now(),
-			})
-		}
+	if hasCritical || result.Score < 60 {
+		result.Status = "critical"
+	} else if hasWarning || result.Score < 80 {
+		result.Status = "warning"
+	} else {
+		result.Status = "healthy"
 	}
 }
 
-// calculateStatistics 计算统计信息
-func (a *PerfAnalyzer) calculateStatistics(metrics map[string][]float64, analysis *Analysis) {
-	stats := make(map[string]map[string]float64)
-
-	for metric, values := range metrics {
-		if len(values) == 0 {
-			continue
-		}
-
-		stats[metric] = map[string]float64{
-			"min":    min(values),
-			"max":    max(values),
-			"avg":    avg(values),
-			"median": median(values),
-			"stddev": stddev(values),
-		}
-	}
-
-	analysis.Results["statistics"] = stats
+// SystemAnalyzer 系统分析器
+type SystemAnalyzer struct {
+	*BaseAnalyzer
 }
 
-// calculateScore 计算评分
-func (a *PerfAnalyzer) calculateScore(analysis *Analysis) float64 {
-	score := 100.0
-
-	// 根据洞察级别扣分
-	for _, insight := range analysis.Insights {
-		switch insight.Level {
-		case "critical":
-			score -= 15
-		case "warning":
-			score -= 8
-		case "info":
-			score -= 2
-		}
+// NewSystemAnalyzer 创建系统分析器
+func NewSystemAnalyzer(config AnalyzerConfig) *SystemAnalyzer {
+	return &SystemAnalyzer{
+		BaseAnalyzer: NewBaseAnalyzer("system-analyzer", config),
 	}
-
-	// 确保分数在0-100之间
-	if score < 0 {
-		score = 0
-	}
-
-	return score
-}
-
-// AnomalyDetector 异常检测器
-type AnomalyDetector struct {
-	sensitivity float64
-	window      int
-}
-
-// NewAnomalyDetector 创建异常检测器
-func NewAnomalyDetector() *AnomalyDetector {
-	return &AnomalyDetector{
-		sensitivity: 2.0, // 标准差倍数
-		window:      10,  // 滑动窗口大小
-	}
-}
-
-// Type 返回分析类型
-func (d *AnomalyDetector) Type() AnalysisType {
-	return AnalysisTypeAnomaly
-}
-
-// Options 返回配置选项
-func (d *AnomalyDetector) Options() map[string]interface{} {
-	return map[string]interface{}{
-		"sensitivity": d.sensitivity,
-		"window":      d.window,
-	}
-}
-
-// Analyze 检测异常
-func (d *AnomalyDetector) Analyze(ctx context.Context, data []collector.Data) (*Analysis, error) {
-	analysis := &Analysis{
-		Type:            AnalysisTypeAnomaly,
-		Timestamp:       time.Now(),
-		Results:         make(map[string]interface{}),
-		Insights:        make([]Insight, 0),
-		Recommendations: make([]Recommendation, 0),
-	}
-
-	// 按节点分组数据
-	nodeData := make(map[string][]collector.Data)
-	for _, d := range data {
-		nodeData[d.Node] = append(nodeData[d.Node], d)
-	}
-
-	// 检测每个节点的异常
-	anomalies := make([]map[string]interface{}, 0)
-	for node, nodeMetrics := range nodeData {
-		if anomaly := d.detectNodeAnomalies(node, nodeMetrics); anomaly != nil {
-			anomalies = append(anomalies, anomaly)
-
-			// 添加洞察
-			analysis.Insights = append(analysis.Insights, Insight{
-				Level:       "warning",
-				Category:    "anomaly",
-				Description: fmt.Sprintf("Anomaly detected on node %s", node),
-				Details:     anomaly,
-				Timestamp:   time.Now(),
-			})
-		}
-	}
-
-	analysis.Results["anomalies"] = anomalies
-	analysis.Results["total_nodes"] = len(nodeData)
-	analysis.Results["anomaly_nodes"] = len(anomalies)
-
-	// 计算评分
-	analysis.Score = 100.0 - (float64(len(anomalies))/float64(len(nodeData)))*50
-
-	return analysis, nil
-}
-
-// detectNodeAnomalies 检测节点异常
-func (d *AnomalyDetector) detectNodeAnomalies(node string, data []collector.Data) map[string]interface{} {
-	anomalies := make(map[string]interface{})
-
-	// 提取时间序列数据
-	for _, d := range data {
-		if d.Type == collector.DataTypePerformance {
-			// 检查CPU异常
-			if cpu, ok := d.Metrics["cpu_usage"].(float64); ok {
-				if cpu > 95.0 {
-					anomalies["high_cpu"] = cpu
-				}
-			}
-
-			// 检查内存异常
-			if mem, ok := d.Metrics["memory_usage"].(float64); ok {
-				if mem > 95.0 {
-					anomalies["high_memory"] = mem
-				}
-			}
-		}
-	}
-
-	if len(anomalies) > 0 {
-		anomalies["node"] = node
-		anomalies["timestamp"] = time.Now()
-		return anomalies
-	}
-
-	return nil
-}
-
-// 统计工具函数
-
-func min(values []float64) float64 {
-	if len(values) == 0 {
-		return 0
-	}
-	minVal := values[0]
-	for _, v := range values[1:] {
-		if v < minVal {
-			minVal = v
-		}
-	}
-	return minVal
-}
-
-func max(values []float64) float64 {
-	if len(values) == 0 {
-		return 0
-	}
-	maxVal := values[0]
-	for _, v := range values[1:] {
-		if v > maxVal {
-			maxVal = v
-		}
-	}
-	return maxVal
-}
-
-func avg(values []float64) float64 {
-	if len(values) == 0 {
-		return 0
-	}
-	sum := 0.0
-	for _, v := range values {
-		sum += v
-	}
-	return sum / float64(len(values))
-}
-
-func median(values []float64) float64 {
-	if len(values) == 0 {
-		return 0
-	}
-
-	sorted := make([]float64, len(values))
-	copy(sorted, values)
-	sort.Float64s(sorted)
-
-	n := len(sorted)
-	if n%2 == 0 {
-		return (sorted[n/2-1] + sorted[n/2]) / 2
-	}
-	return sorted[n/2]
-}
-
-func stddev(values []float64) float64 {
-	if len(values) == 0 {
-		return 0
-	}
-
-	mean := avg(values)
-	sumSquares := 0.0
-
-	for _, v := range values {
-		diff := v - mean
-		sumSquares += diff * diff
-	}
-
-	variance := sumSquares / float64(len(values))
-	return math.Sqrt(variance)
 }
