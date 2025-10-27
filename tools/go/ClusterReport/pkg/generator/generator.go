@@ -2,652 +2,538 @@ package generator
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/devops-toolkit/clusterreport/pkg/analyzer"
-	"github.com/jung-kurt/gofpdf"
-	"github.com/tealeg/xlsx/v3"
-)
-
-// OutputFormat 输出格式
-type OutputFormat string
-
-const (
-	OutputFormatHTML     OutputFormat = "html"
-	OutputFormatPDF      OutputFormat = "pdf"
-	OutputFormatMarkdown OutputFormat = "markdown"
-	OutputFormatExcel    OutputFormat = "excel"
-	OutputFormatJSON     OutputFormat = "json"
+	"github.com/devops-toolkit/clusterreport/pkg/collector"
 )
 
 // Generator 报告生成器接口
 type Generator interface {
-	// Generate 生成报告
-	Generate(ctx context.Context, report *analyzer.Report) ([]byte, error)
-
-	// Format 输出格式
-	Format() OutputFormat
-
-	// SetTemplate 设置模板
-	SetTemplate(tmpl Template) error
+	Generate(data interface{}) ([]byte, error)
+	Format() string
 }
 
-// Template 报告模板
-type Template struct {
-	Name     string
-	Path     string
-	Content  string
-	Sections []Section
-	Assets   []Asset
+// ReportData 报告数据
+type ReportData struct {
+	Title       string                   `json:"title"`
+	GeneratedAt time.Time                `json:"generated_at"`
+	SystemInfo  *SystemInfo              `json:"system_info"`
+	Metrics     *collector.SystemMetrics `json:"metrics,omitempty"`
+	Analysis    *analyzer.AnalysisResult `json:"analysis,omitempty"`
+	Summary     *Summary                 `json:"summary"`
+	Custom      map[string]interface{}   `json:"custom,omitempty"`
 }
 
-// Section 报告章节
-type Section struct {
-	Title    string
-	Type     string // text, table, chart
-	DataPath string
-	Template string
-	Order    int
+// SystemInfo 系统信息
+type SystemInfo struct {
+	Hostname      string `json:"hostname"`
+	OS            string `json:"os"`
+	Architecture  string `json:"architecture"`
+	KernelVersion string `json:"kernel_version"`
 }
 
-// Asset 资源文件
-type Asset struct {
-	Name string
-	Path string
-	Type string // css, js, image
+// Summary 报告摘要
+type Summary struct {
+	Status      string   `json:"status"`
+	Score       float64  `json:"score"`
+	TotalIssues int      `json:"total_issues"`
+	Critical    int      `json:"critical"`
+	Warning     int      `json:"warning"`
+	Healthy     int      `json:"healthy"`
+	Highlights  []string `json:"highlights"`
 }
 
-// Options 生成器选项
-type Options struct {
-	Title          string
-	Author         string
-	Date           time.Time
-	IncludeCharts  bool
-	IncludeRawData bool
-	IncludeTOC     bool
-	CustomCSS      string
-	CustomJS       string
+// JSONGenerator JSON 格式生成器
+type JSONGenerator struct{}
+
+// NewJSONGenerator 创建 JSON 生成器
+func NewJSONGenerator() *JSONGenerator {
+	return &JSONGenerator{}
 }
 
-// MultiFormat 多格式生成器
-type MultiFormat struct {
-	generators map[OutputFormat]Generator
-	options    Options
+// Generate 生成 JSON 报告
+func (g *JSONGenerator) Generate(data interface{}) ([]byte, error) {
+	return json.MarshalIndent(data, "", "  ")
 }
 
-// NewMultiFormat 创建多格式生成器
-func NewMultiFormat(generators ...Generator) *MultiFormat {
-	m := &MultiFormat{
-		generators: make(map[OutputFormat]Generator),
-		options: Options{
-			Title:         "Cluster Report",
-			Author:        "ClusterReport",
-			Date:          time.Now(),
-			IncludeCharts: true,
-			IncludeTOC:    true,
-		},
-	}
-
-	for _, g := range generators {
-		m.generators[g.Format()] = g
-	}
-
-	return m
+// Format 返回格式名称
+func (g *JSONGenerator) Format() string {
+	return "json"
 }
 
-// GenerateAll 生成所有格式的报告
-func (m *MultiFormat) GenerateAll(ctx context.Context, report *analyzer.Report) (map[OutputFormat][]byte, error) {
-	results := make(map[OutputFormat][]byte)
-
-	for format, generator := range m.generators {
-		data, err := generator.Generate(ctx, report)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate %s report: %w", format, err)
-		}
-		results[format] = data
-	}
-
-	return results, nil
-}
-
-// HTMLGenerator HTML报告生成器
+// HTMLGenerator HTML 格式生成器
 type HTMLGenerator struct {
-	template *Template
-	options  Options
+	template *template.Template
 }
 
-// NewHTMLGenerator 创建HTML生成器
-func NewHTMLGenerator() *HTMLGenerator {
-	return &HTMLGenerator{
-		options: Options{
-			Title:         "Cluster Report",
-			IncludeCharts: true,
-			IncludeTOC:    true,
-		},
-	}
-}
-
-// Format 返回格式
-func (g *HTMLGenerator) Format() OutputFormat {
-	return OutputFormatHTML
-}
-
-// SetTemplate 设置模板
-func (g *HTMLGenerator) SetTemplate(tmpl Template) error {
-	g.template = &tmpl
-	return nil
-}
-
-// Generate 生成HTML报告
-func (g *HTMLGenerator) Generate(ctx context.Context, report *analyzer.Report) ([]byte, error) {
-	// 使用默认模板
-	htmlTemplate := g.getDefaultTemplate()
-
-	tmpl, err := template.New("report").Funcs(template.FuncMap{
-		"formatTime":    formatTime,
-		"formatFloat":   formatFloat,
-		"formatPercent": formatPercent,
-		"json":          toJSON,
-	}).Parse(htmlTemplate)
+// NewHTMLGenerator 创建 HTML 生成器
+func NewHTMLGenerator() (*HTMLGenerator, error) {
+	tmpl, err := template.New("report").Parse(htmlTemplate)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse template: %w", err)
 	}
 
+	return &HTMLGenerator{
+		template: tmpl,
+	}, nil
+}
+
+// Generate 生成 HTML 报告
+func (g *HTMLGenerator) Generate(data interface{}) ([]byte, error) {
 	var buf bytes.Buffer
-	data := map[string]interface{}{
-		"Title":        g.options.Title,
-		"GeneratedAt":  time.Now(),
-		"Report":       report,
-		"OverallScore": report.OverallScore,
-		"Analyses":     report.Analyses,
-		"Options":      g.options,
-	}
 
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return nil, err
+	if err := g.template.Execute(&buf, data); err != nil {
+		return nil, fmt.Errorf("failed to execute template: %w", err)
 	}
 
 	return buf.Bytes(), nil
 }
 
-// getDefaultTemplate 获取默认HTML模板
-func (g *HTMLGenerator) getDefaultTemplate() string {
-	return `<!DOCTYPE html>
-<html lang="en">
+// Format 返回格式名称
+func (g *HTMLGenerator) Format() string {
+	return "html"
+}
+
+// MarkdownGenerator Markdown 格式生成器
+type MarkdownGenerator struct{}
+
+// NewMarkdownGenerator 创建 Markdown 生成器
+func NewMarkdownGenerator() *MarkdownGenerator {
+	return &MarkdownGenerator{}
+}
+
+// Generate 生成 Markdown 报告
+func (g *MarkdownGenerator) Generate(data interface{}) ([]byte, error) {
+	reportData, ok := data.(*ReportData)
+	if !ok {
+		return nil, fmt.Errorf("invalid data type")
+	}
+
+	var buf bytes.Buffer
+
+	// 标题
+	buf.WriteString(fmt.Sprintf("# %s\n\n", reportData.Title))
+	buf.WriteString(fmt.Sprintf("**生成时间**: %s\n\n", reportData.GeneratedAt.Format("2006-01-02 15:04:05")))
+
+	// 系统信息
+	if reportData.SystemInfo != nil {
+		buf.WriteString("## 系统信息\n\n")
+		buf.WriteString(fmt.Sprintf("- **主机名**: %s\n", reportData.SystemInfo.Hostname))
+		buf.WriteString(fmt.Sprintf("- **操作系统**: %s\n", reportData.SystemInfo.OS))
+		buf.WriteString(fmt.Sprintf("- **架构**: %s\n", reportData.SystemInfo.Architecture))
+		buf.WriteString(fmt.Sprintf("- **内核版本**: %s\n\n", reportData.SystemInfo.KernelVersion))
+	}
+
+	// 摘要
+	if reportData.Summary != nil {
+		buf.WriteString("## 报告摘要\n\n")
+		buf.WriteString(fmt.Sprintf("- **状态**: %s\n", getStatusEmoji(reportData.Summary.Status)))
+		buf.WriteString(fmt.Sprintf("- **健康评分**: %.1f/100\n", reportData.Summary.Score))
+		buf.WriteString(fmt.Sprintf("- **问题总数**: %d\n", reportData.Summary.TotalIssues))
+		buf.WriteString(fmt.Sprintf("  - 严重: %d\n", reportData.Summary.Critical))
+		buf.WriteString(fmt.Sprintf("  - 警告: %d\n", reportData.Summary.Warning))
+		buf.WriteString("\n")
+
+		if len(reportData.Summary.Highlights) > 0 {
+			buf.WriteString("### 关键发现\n\n")
+			for _, highlight := range reportData.Summary.Highlights {
+				buf.WriteString(fmt.Sprintf("- %s\n", highlight))
+			}
+			buf.WriteString("\n")
+		}
+	}
+
+	// 分析结果
+	if reportData.Analysis != nil {
+		buf.WriteString("## 详细分析\n\n")
+
+		if len(reportData.Analysis.Issues) > 0 {
+			buf.WriteString("### 发现的问题\n\n")
+			buf.WriteString("| 严重度 | 类别 | 描述 | 当前值 | 阈值 |\n")
+			buf.WriteString("|--------|------|------|--------|------|\n")
+
+			for _, issue := range reportData.Analysis.Issues {
+				buf.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %s |\n",
+					getSeverityEmoji(issue.Severity),
+					issue.Category,
+					issue.Description,
+					issue.Value,
+					issue.Threshold,
+				))
+			}
+			buf.WriteString("\n")
+		}
+
+		if len(reportData.Analysis.Suggestions) > 0 {
+			buf.WriteString("### 优化建议\n\n")
+			for i, suggestion := range reportData.Analysis.Suggestions {
+				buf.WriteString(fmt.Sprintf("%d. %s\n", i+1, suggestion))
+			}
+			buf.WriteString("\n")
+		}
+	}
+
+	// 指标详情
+	if reportData.Metrics != nil {
+		buf.WriteString("## 系统指标\n\n")
+
+		// CPU
+		buf.WriteString("### CPU\n\n")
+		buf.WriteString(fmt.Sprintf("- 核心数: %d\n", reportData.Metrics.CPU.Cores))
+		buf.WriteString(fmt.Sprintf("- 使用率: %.2f%%\n", reportData.Metrics.CPU.Usage))
+		buf.WriteString(fmt.Sprintf("- 负载平均值: %.2f (1分钟), %.2f (5分钟), %.2f (15分钟)\n\n",
+			reportData.Metrics.CPU.LoadAvg1,
+			reportData.Metrics.CPU.LoadAvg5,
+			reportData.Metrics.CPU.LoadAvg15,
+		))
+
+		// 内存
+		buf.WriteString("### 内存\n\n")
+		buf.WriteString(fmt.Sprintf("- 总内存: %.2f GB\n", float64(reportData.Metrics.Memory.Total)/1024/1024/1024))
+		buf.WriteString(fmt.Sprintf("- 已用内存: %.2f GB\n", float64(reportData.Metrics.Memory.Used)/1024/1024/1024))
+		buf.WriteString(fmt.Sprintf("- 可用内存: %.2f GB\n", float64(reportData.Metrics.Memory.Available)/1024/1024/1024))
+		buf.WriteString(fmt.Sprintf("- 使用率: %.2f%%\n\n", reportData.Metrics.Memory.UsedPercent))
+
+		// 磁盘
+		if len(reportData.Metrics.Disk) > 0 {
+			buf.WriteString("### 磁盘\n\n")
+			buf.WriteString("| 挂载点 | 总容量 | 已用 | 可用 | 使用率 |\n")
+			buf.WriteString("|--------|--------|------|------|--------|\n")
+
+			for _, disk := range reportData.Metrics.Disk {
+				buf.WriteString(fmt.Sprintf("| %s | %.2f GB | %.2f GB | %.2f GB | %.1f%% |\n",
+					disk.MountPoint,
+					float64(disk.Total)/1024/1024/1024,
+					float64(disk.Used)/1024/1024/1024,
+					float64(disk.Available)/1024/1024/1024,
+					disk.UsedPercent,
+				))
+			}
+			buf.WriteString("\n")
+		}
+	}
+
+	// 页脚
+	buf.WriteString("---\n\n")
+	buf.WriteString("*此报告由 ClusterReport 自动生成*\n")
+
+	return buf.Bytes(), nil
+}
+
+// Format 返回格式名称
+func (g *MarkdownGenerator) Format() string {
+	return "markdown"
+}
+
+// Helper functions
+
+func getStatusEmoji(status string) string {
+	switch status {
+	case "healthy":
+		return "✅ 健康"
+	case "warning":
+		return "⚠️ 警告"
+	case "critical":
+		return "🔴 严重"
+	default:
+		return "❓ 未知"
+	}
+}
+
+func getSeverityEmoji(severity string) string {
+	switch severity {
+	case "critical":
+		return "🔴"
+	case "warning":
+		return "⚠️"
+	case "low":
+		return "ℹ️"
+	default:
+		return "•"
+	}
+}
+
+// HTML 模板
+const htmlTemplate = `<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}}</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             line-height: 1.6;
             color: #333;
+            background-color: #f5f7fa;
+        }
+        
+        .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
-            background: #f5f5f5;
         }
+        
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 2rem;
+            padding: 40px 20px;
             border-radius: 10px;
-            margin-bottom: 2rem;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
         }
-        .score-badge {
-            display: inline-block;
-            background: rgba(255,255,255,0.2);
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-size: 1.2rem;
-            font-weight: bold;
+        
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
         }
-        .section {
+        
+        .header .subtitle {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .card {
             background: white;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+            font-size: 24px;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .summary-item {
+            background: #f8f9fa;
+            padding: 15px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 4px solid #667eea;
         }
-        .insight {
-            padding: 1rem;
-            margin: 0.5rem 0;
-            border-left: 4px solid;
-            background: #f9f9f9;
+        
+        .summary-item .label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
-        .insight.info { border-color: #3498db; }
-        .insight.warning { border-color: #f39c12; }
-        .insight.critical { border-color: #e74c3c; }
-        .recommendation {
-            background: #e8f5e9;
-            padding: 1rem;
-            margin: 0.5rem 0;
-            border-radius: 4px;
+        
+        .summary-item .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-top: 5px;
         }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .status-healthy {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-critical {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .progress-bar {
+            background: #e0e0e0;
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+        }
+        
         table {
             width: 100%;
             border-collapse: collapse;
-            margin: 1rem 0;
+            margin-top: 15px;
         }
+        
         th, td {
-            padding: 0.75rem;
+            padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid #e0e0e0;
         }
+        
         th {
-            background: #f5f5f5;
+            background: #f8f9fa;
             font-weight: 600;
+            color: #666;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
-        .chart-container {
-            margin: 2rem 0;
-            padding: 1rem;
-            background: white;
-            border-radius: 8px;
+        
+        tr:hover {
+            background: #f8f9fa;
         }
+        
+        .metric-value {
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .issue-critical {
+            color: #dc3545;
+        }
+        
+        .issue-warning {
+            color: #ffc107;
+        }
+        
         .footer {
             text-align: center;
-            color: #666;
-            margin-top: 3rem;
-            padding-top: 2rem;
-            border-top: 1px solid #ddd;
+            color: #999;
+            font-size: 12px;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>{{.Title}}</h1>
-        <p>Generated at: {{formatTime .GeneratedAt}}</p>
-        <div class="score-badge">Overall Score: {{formatFloat .OverallScore}}%</div>
-    </div>
-
-    {{if .Options.IncludeTOC}}
-    <div class="section">
-        <h2>Table of Contents</h2>
-        <ul>
-            <li><a href="#summary">Executive Summary</a></li>
-            <li><a href="#analyses">Analysis Results</a></li>
-            <li><a href="#insights">Insights & Recommendations</a></li>
-            <li><a href="#details">Detailed Findings</a></li>
-        </ul>
-    </div>
-    {{end}}
-
-    <div id="summary" class="section">
-        <h2>Executive Summary</h2>
-        <p>This report provides a comprehensive analysis of your cluster infrastructure.</p>
-        <ul>
-            <li>Total Nodes Analyzed: {{len .Report.Data}}</li>
-            <li>Overall Health Score: {{formatFloat .OverallScore}}%</li>
-            <li>Report Generated: {{formatTime .GeneratedAt}}</li>
-        </ul>
-    </div>
-
-    <div id="analyses" class="section">
-        <h2>Analysis Results</h2>
-        {{range .Analyses}}
-        <div class="analysis">
-            <h3>{{.Type}} Analysis</h3>
-            <p>Score: {{formatFloat .Score}}%</p>
-            
-            {{if .Insights}}
-            <h4>Key Insights:</h4>
-            {{range .Insights}}
-            <div class="insight {{.Level}}">
-                <strong>{{.Description}}</strong>
-                <br>Category: {{.Category}} | Level: {{.Level}}
+    <div class="container">
+        <div class="header">
+            <h1>{{.Title}}</h1>
+            <div class="subtitle">生成时间: {{.GeneratedAt.Format "2006-01-02 15:04:05"}}</div>
+        </div>
+        
+        {{if .Summary}}
+        <div class="card">
+            <h2>报告摘要</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="label">状态</div>
+                    <div class="value">
+                        <span class="status-badge status-{{.Summary.Status}}">
+                            {{if eq .Summary.Status "healthy"}}✅ 健康{{end}}
+                            {{if eq .Summary.Status "warning"}}⚠️ 警告{{end}}
+                            {{if eq .Summary.Status "critical"}}🔴 严重{{end}}
+                        </span>
+                    </div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">健康评分</div>
+                    <div class="value">{{printf "%.1f" .Summary.Score}}/100</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {{.Summary.Score}}%"></div>
+                    </div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">严重问题</div>
+                    <div class="value issue-critical">{{.Summary.Critical}}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">警告</div>
+                    <div class="value issue-warning">{{.Summary.Warning}}</div>
+                </div>
             </div>
-            {{end}}
-            {{end}}
-
-            {{if .Recommendations}}
-            <h4>Recommendations:</h4>
-            {{range .Recommendations}}
-            <div class="recommendation">
-                <strong>{{.Action}}</strong>
-                <br>Reason: {{.Reason}}
-                <br>Impact: {{.Impact}} | Effort: {{.Effort}} | Priority: {{.Priority}}
-            </div>
-            {{end}}
-            {{end}}
         </div>
         {{end}}
-    </div>
-
-    <div class="footer">
-        <p>Generated by ClusterReport v0.1.0</p>
+        
+        {{if .Analysis}}
+        {{if .Analysis.Issues}}
+        <div class="card">
+            <h2>发现的问题</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>严重度</th>
+                        <th>类别</th>
+                        <th>描述</th>
+                        <th>当前值</th>
+                        <th>阈值</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Analysis.Issues}}
+                    <tr>
+                        <td>
+                            {{if eq .Severity "critical"}}🔴{{end}}
+                            {{if eq .Severity "warning"}}⚠️{{end}}
+                            {{.Severity}}
+                        </td>
+                        <td>{{.Category}}</td>
+                        <td>{{.Description}}</td>
+                        <td class="metric-value">{{.Value}}</td>
+                        <td>{{.Threshold}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{end}}
+        
+        {{if .Analysis.Suggestions}}
+        <div class="card">
+            <h2>优化建议</h2>
+            <ul>
+                {{range .Analysis.Suggestions}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+        {{end}}
+        
+        {{if .Metrics}}
+        <div class="card">
+            <h2>系统指标</h2>
+            <h3>CPU</h3>
+            <p>核心数: <span class="metric-value">{{.Metrics.CPU.Cores}}</span></p>
+            <p>使用率: <span class="metric-value">{{printf "%.2f" .Metrics.CPU.Usage}}%</span></p>
+            
+            <h3 style="margin-top: 20px;">内存</h3>
+            <p>使用率: <span class="metric-value">{{printf "%.2f" .Metrics.Memory.UsedPercent}}%</span></p>
+            <p>总内存: {{printf "%.2f" (divf .Metrics.Memory.Total 1073741824)}} GB</p>
+            <p>已用: {{printf "%.2f" (divf .Metrics.Memory.Used 1073741824)}} GB</p>
+        </div>
+        {{end}}
+        
+        <div class="footer">
+            此报告由 ClusterReport 自动生成
+        </div>
     </div>
 </body>
 </html>`
-}
-
-// PDFGenerator PDF报告生成器
-type PDFGenerator struct {
-	template *Template
-	options  Options
-}
-
-// NewPDFGenerator 创建PDF生成器
-func NewPDFGenerator() *PDFGenerator {
-	return &PDFGenerator{
-		options: Options{
-			Title: "Cluster Report",
-		},
-	}
-}
-
-// Format 返回格式
-func (g *PDFGenerator) Format() OutputFormat {
-	return OutputFormatPDF
-}
-
-// SetTemplate 设置模板
-func (g *PDFGenerator) SetTemplate(tmpl Template) error {
-	g.template = &tmpl
-	return nil
-}
-
-// Generate 生成PDF报告
-func (g *PDFGenerator) Generate(ctx context.Context, report *analyzer.Report) ([]byte, error) {
-	pdf := gofpdf.New("P", "mm", "A4", "")
-
-	// 添加页面
-	pdf.AddPage()
-
-	// 设置字体
-	pdf.SetFont("Arial", "B", 16)
-
-	// 标题
-	pdf.Cell(190, 10, g.options.Title)
-	pdf.Ln(12)
-
-	// 生成时间
-	pdf.SetFont("Arial", "", 10)
-	pdf.Cell(190, 10, fmt.Sprintf("Generated: %s", time.Now().Format("2006-01-02 15:04:05")))
-	pdf.Ln(10)
-
-	// 总体评分
-	pdf.SetFont("Arial", "B", 14)
-	pdf.Cell(190, 10, fmt.Sprintf("Overall Score: %.1f%%", report.OverallScore))
-	pdf.Ln(15)
-
-	// 分析结果
-	pdf.SetFont("Arial", "B", 12)
-	pdf.Cell(190, 10, "Analysis Results")
-	pdf.Ln(10)
-
-	for _, analysis := range report.Analyses {
-		// 分析类型
-		pdf.SetFont("Arial", "B", 11)
-		pdf.Cell(190, 8, string(analysis.Type))
-		pdf.Ln(8)
-
-		// 评分
-		pdf.SetFont("Arial", "", 10)
-		pdf.Cell(190, 6, fmt.Sprintf("Score: %.1f%%", analysis.Score))
-		pdf.Ln(6)
-
-		// 洞察
-		if len(analysis.Insights) > 0 {
-			pdf.SetFont("Arial", "I", 10)
-			pdf.Cell(190, 6, "Key Insights:")
-			pdf.Ln(6)
-
-			for _, insight := range analysis.Insights {
-				pdf.SetFont("Arial", "", 9)
-				pdf.MultiCell(180, 5, fmt.Sprintf("• %s (%s)", insight.Description, insight.Level), "", "", false)
-				pdf.Ln(2)
-			}
-		}
-
-		pdf.Ln(5)
-	}
-
-	// 输出到缓冲区
-	var buf bytes.Buffer
-	err := pdf.Output(&buf)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
-}
-
-// MarkdownGenerator Markdown报告生成器
-type MarkdownGenerator struct {
-	template *Template
-	options  Options
-}
-
-// NewMarkdownGenerator 创建Markdown生成器
-func NewMarkdownGenerator() *MarkdownGenerator {
-	return &MarkdownGenerator{
-		options: Options{
-			Title:      "Cluster Report",
-			IncludeTOC: true,
-		},
-	}
-}
-
-// Format 返回格式
-func (g *MarkdownGenerator) Format() OutputFormat {
-	return OutputFormatMarkdown
-}
-
-// SetTemplate 设置模板
-func (g *MarkdownGenerator) SetTemplate(tmpl Template) error {
-	g.template = &tmpl
-	return nil
-}
-
-// Generate 生成Markdown报告
-func (g *MarkdownGenerator) Generate(ctx context.Context, report *analyzer.Report) ([]byte, error) {
-	var sb strings.Builder
-
-	// 标题
-	sb.WriteString(fmt.Sprintf("# %s\n\n", g.options.Title))
-	sb.WriteString(fmt.Sprintf("**Generated:** %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
-	sb.WriteString(fmt.Sprintf("**Overall Score:** %.1f%%\n\n", report.OverallScore))
-
-	// 目录
-	if g.options.IncludeTOC {
-		sb.WriteString("## Table of Contents\n\n")
-		sb.WriteString("- [Executive Summary](#executive-summary)\n")
-		sb.WriteString("- [Analysis Results](#analysis-results)\n")
-		sb.WriteString("- [Insights and Recommendations](#insights-and-recommendations)\n\n")
-	}
-
-	// 执行摘要
-	sb.WriteString("## Executive Summary\n\n")
-	sb.WriteString("This report provides a comprehensive analysis of your cluster infrastructure.\n\n")
-	sb.WriteString(fmt.Sprintf("- **Total Nodes Analyzed:** %d\n", len(report.Data)))
-	sb.WriteString(fmt.Sprintf("- **Overall Health Score:** %.1f%%\n", report.OverallScore))
-	sb.WriteString(fmt.Sprintf("- **Report Generated:** %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
-
-	// 分析结果
-	sb.WriteString("## Analysis Results\n\n")
-
-	for _, analysis := range report.Analyses {
-		sb.WriteString(fmt.Sprintf("### %s Analysis\n\n", analysis.Type))
-		sb.WriteString(fmt.Sprintf("**Score:** %.1f%%\n\n", analysis.Score))
-
-		// 洞察
-		if len(analysis.Insights) > 0 {
-			sb.WriteString("#### Key Insights:\n\n")
-			for _, insight := range analysis.Insights {
-				sb.WriteString(fmt.Sprintf("- **%s** (%s): %s\n", insight.Level, insight.Category, insight.Description))
-			}
-			sb.WriteString("\n")
-		}
-
-		// 建议
-		if len(analysis.Recommendations) > 0 {
-			sb.WriteString("#### Recommendations:\n\n")
-			for _, rec := range analysis.Recommendations {
-				sb.WriteString(fmt.Sprintf("- **%s** (Priority %d)\n", rec.Action, rec.Priority))
-				sb.WriteString(fmt.Sprintf("  - Reason: %s\n", rec.Reason))
-				sb.WriteString(fmt.Sprintf("  - Impact: %s\n", rec.Impact))
-				sb.WriteString(fmt.Sprintf("  - Effort: %s\n", rec.Effort))
-			}
-			sb.WriteString("\n")
-		}
-	}
-
-	return []byte(sb.String()), nil
-}
-
-// ExcelGenerator Excel报告生成器
-type ExcelGenerator struct {
-	template *Template
-	options  Options
-}
-
-// NewExcelGenerator 创建Excel生成器
-func NewExcelGenerator() *ExcelGenerator {
-	return &ExcelGenerator{
-		options: Options{
-			Title: "Cluster Report",
-		},
-	}
-}
-
-// Format 返回格式
-func (g *ExcelGenerator) Format() OutputFormat {
-	return OutputFormatExcel
-}
-
-// SetTemplate 设置模板
-func (g *ExcelGenerator) SetTemplate(tmpl Template) error {
-	g.template = &tmpl
-	return nil
-}
-
-// Generate 生成Excel报告
-func (g *ExcelGenerator) Generate(ctx context.Context, report *analyzer.Report) ([]byte, error) {
-	file := xlsx.NewFile()
-
-	// 创建摘要sheet
-	summarySheet, err := file.AddSheet("Summary")
-	if err != nil {
-		return nil, err
-	}
-
-	// 添加标题
-	titleRow := summarySheet.AddRow()
-	titleCell := titleRow.AddCell()
-	titleCell.Value = g.options.Title
-
-	// 添加生成时间
-	timeRow := summarySheet.AddRow()
-	timeCell := timeRow.AddCell()
-	timeCell.Value = "Generated: " + time.Now().Format("2006-01-02 15:04:05")
-
-	// 添加总体评分
-	scoreRow := summarySheet.AddRow()
-	scoreCell := scoreRow.AddCell()
-	scoreCell.Value = fmt.Sprintf("Overall Score: %.1f%%", report.OverallScore)
-
-	// 空行
-	summarySheet.AddRow()
-
-	// 添加分析结果
-	for _, analysis := range report.Analyses {
-		// 分析类型
-		typeRow := summarySheet.AddRow()
-		typeCell := typeRow.AddCell()
-		typeCell.Value = string(analysis.Type) + " Analysis"
-
-		// 评分
-		scoreRow := summarySheet.AddRow()
-		scoreCell := scoreRow.AddCell()
-		scoreCell.Value = fmt.Sprintf("Score: %.1f%%", analysis.Score)
-
-		// 洞察数量
-		if len(analysis.Insights) > 0 {
-			insightRow := summarySheet.AddRow()
-			insightCell := insightRow.AddCell()
-			insightCell.Value = fmt.Sprintf("Insights: %d", len(analysis.Insights))
-		}
-
-		// 建议数量
-		if len(analysis.Recommendations) > 0 {
-			recRow := summarySheet.AddRow()
-			recCell := recRow.AddCell()
-			recCell.Value = fmt.Sprintf("Recommendations: %d", len(analysis.Recommendations))
-		}
-
-		// 空行
-		summarySheet.AddRow()
-	}
-
-	// 创建详细数据sheet
-	dataSheet, err := file.AddSheet("Raw Data")
-	if err != nil {
-		return nil, err
-	}
-
-	// 添加表头
-	headerRow := dataSheet.AddRow()
-	headerRow.AddCell().Value = "Node"
-	headerRow.AddCell().Value = "Type"
-	headerRow.AddCell().Value = "Timestamp"
-	headerRow.AddCell().Value = "Metrics"
-
-	// 添加数据
-	for _, data := range report.Data {
-		dataRow := dataSheet.AddRow()
-		dataRow.AddCell().Value = data.Node
-		dataRow.AddCell().Value = string(data.Type)
-		dataRow.AddCell().Value = data.Timestamp.Format("2006-01-02 15:04:05")
-
-		// 将metrics转换为JSON字符串
-		metricsJSON, _ := json.Marshal(data.Metrics)
-		dataRow.AddCell().Value = string(metricsJSON)
-	}
-
-	// 保存到缓冲区
-	var buf bytes.Buffer
-	err = file.Write(&buf)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
-}
-
-// 辅助函数
-
-func formatTime(t time.Time) string {
-	return t.Format("2006-01-02 15:04:05")
-}
-
-func formatFloat(f float64) string {
-	return fmt.Sprintf("%.1f", f)
-}
-
-func formatPercent(f float64) string {
-	return fmt.Sprintf("%.1f%%", f)
-}
-
-func toJSON(v interface{}) string {
-	b, _ := json.Marshal(v)
-	return string(b)
-}
-
-// SaveToFile 保存报告到文件
-func SaveToFile(data []byte, filename string) error {
-	dir := filepath.Dir(filename)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	return ioutil.WriteFile(filename, data, 0644)
-}
