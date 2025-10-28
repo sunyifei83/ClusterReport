@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "timestamp": "2025-10-28T16:47:12.804217+08:00",
+    "node": "localhost",
+    "collect_types": [
+      "config"
+    ],
+    "duration_seconds": 0.912457875,
+    "version": "0.8.0-dev"
+  },
+  "nodeprobe": {
+    "hostname": "sunyifeideMacBook-Pro.local",
+    "load_average": "N/A",
+    "timezone": "Asia/Shanghai",
+    "os": "Unknown",
+    "kernel": "Unknown",
+    "cpu": {
+      "model": "",
+      "cores": 0,
+      "run_mode": "",
+      "performance_mode": ""
+    },
+    "memory": {
+      "total_gb": 0,
+      "slots": null
+    },
+    "disks": {
+      "system_disk": "/dev/disk1s1s1 142G/324G (70%)",
+      "data_disks": null,
+      "total_disks": 0,
+      "data_disk_num": 0
+    },
+    "network": null,
+    "python": {
+      "version": "Python 3.9.6",
+      "path": "/usr/bin/python3"
+    },
+    "java": {
+      "version": "Java 1.8.0_241",
+      "path": "/usr/bin/java"
+    },
+    "kernel_modules": {
+      "nf_conntrack": false,
+      "br_netfilter": false,
+      "message": "nf_conntrack: 未加载(需要root权限), br_netfilter: 未加载(需要root权限)"
+    },
+    "timestamp": "2025-10-28 16:47:11",
+    "nodeprobe_version": "1.1.1"
+  }
+}

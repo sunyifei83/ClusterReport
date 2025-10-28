@@ -1,0 +1,20 @@
+{
+  "timestamp": "2025-10-28T16:48:05.101493+08:00",
+  "analyzer": "system-analyzer",
+  "status": "healthy",
+  "score": 100,
+  "issues": [],
+  "metrics": {
+    "cpu_cores": 4,
+    "cpu_usage": 45.5,
+    "disk_usage_/": 70,
+    "load_avg_1": 0,
+    "load_avg_15": 0,
+    "load_avg_5": 0,
+    "load_per_core_1": 0,
+    "memory_available": 6012954215,
+    "memory_total": 17179869184,
+    "memory_usage_percent": 64.99999999650754
+  },
+  "suggestions": []
+}
