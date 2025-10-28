@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -133,7 +135,8 @@ func (app *Application) collectCommand() *cobra.Command {
 		Short: "Collect data from cluster nodes",
 		Long:  `Collect hardware configuration and performance data from specified cluster nodes.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// ctx := context.Background()
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
 
 			// 确定要采集的节点
 			targetNodes := nodes
@@ -146,18 +149,26 @@ func (app *Application) collectCommand() *cobra.Command {
 				}
 			}
 
+			// 如果没有指定节点，默认采集本地
 			if len(targetNodes) == 0 {
-				return fmt.Errorf("no nodes specified for collection")
+				targetNodes = []string{"localhost"}
 			}
 
-			fmt.Printf("Collecting data from %d nodes...\n", len(targetNodes))
+			// 创建系统采集器
+			verbose := viper.GetBool("verbose")
+			collector := NewSystemCollector(CollectorConfig{}, verbose)
 
-			// TODO: 实际调用collector进行数据采集
-			// data, err := app.Collector.Collect(ctx, targetNodes)
+			// 并发采集多个节点
+			results := collector.CollectMultiple(ctx, targetNodes, parallel)
 
-			fmt.Printf("Data collection completed successfully\n")
+			// 打印摘要
+			collector.PrintSummary(results)
 
+			// 保存结果
 			if output != "" {
+				if err := saveCollectionResults(output, results); err != nil {
+					return fmt.Errorf("failed to save results: %w", err)
+				}
 				fmt.Printf("Results saved to: %s\n", output)
 			}
 
@@ -166,12 +177,22 @@ func (app *Application) collectCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&cluster, "cluster", "C", "", "cluster name from config")
-	cmd.Flags().StringSliceVarP(&nodes, "nodes", "n", []string{}, "nodes to collect from")
-	cmd.Flags().StringVarP(&output, "output", "o", "", "output file path")
+	cmd.Flags().StringSliceVarP(&nodes, "nodes", "n", []string{}, "nodes to collect from (default: localhost)")
+	cmd.Flags().StringVarP(&output, "output", "o", "", "output file path (JSON format)")
 	cmd.Flags().IntVarP(&parallel, "parallel", "p", 10, "parallel workers")
 	cmd.Flags().DurationVarP(&timeout, "timeout", "t", 5*time.Minute, "collection timeout")
 
 	return cmd
+}
+
+// saveCollectionResults 保存采集结果
+func saveCollectionResults(filename string, results map[string]*SystemInfo) error {
+	data, err := json.MarshalIndent(results, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(filename, data, 0644)
 }
 
 // analyzeCommand 数据分析命令
