@@ -1,340 +1,242 @@
 # 快速入门指南
 
-欢迎使用 ClusterReport！本指南将帮助您在 5 分钟内生成第一份集群报告。
+欢迎使用 ClusterReport！本指南将帮助您了解项目的当前状态和基本使用方法。
 
-## 🎯 学习目标
+## ⚠️ 项目状态说明
 
-完成本指南后，您将能够：
-- ✅ 安装 ClusterReport
-- ✅ 采集本地系统数据
-- ✅ 生成 HTML 报告
-- ✅ 理解基本工作流程
+**ClusterReport 当前处于开发阶段（v0.7.0，70%完成度）**
+
+- ✅ 核心框架已完成
+- ✅ 数据采集器、分析器、生成器基础代码已完成
+- 🚧 CLI 命令行工具正在完善中
+- 🚧 部分功能尚未实现
+
+**预计 v1.0 正式版发布时间**: 2025年12月
 
 ## 📋 前置条件
 
+- Go 1.21 或更高版本
 - Linux 或 macOS 系统
-- 具有管理员权限（用于系统信息采集）
-- 5 分钟时间
+- Git
 
 ## 🚀 快速开始
 
-### 步骤 1: 安装 ClusterReport
-
-选择以下任一安装方式：
-
-#### 方式 A: 使用安装脚本（推荐）
-
-```bash
-curl -sSL https://raw.githubusercontent.com/sunyifei83/devops-toolkit/main/scripts/installation/install.sh | bash
-```
-
-#### 方式 B: 从源码编译
+### 步骤 1: 克隆项目
 
 ```bash
 git clone https://github.com/sunyifei83/devops-toolkit.git
 cd devops-toolkit
-make install
 ```
 
-#### 方式 C: 使用 Docker
+### 步骤 2: 编译项目
 
 ```bash
-docker pull sunyifei83/clusterreport:latest
-docker run -it sunyifei83/clusterreport:latest clusterreport --version
+# 编译 CLI 工具
+go build -o clusterreport ./cmd/cli
+
+# 验证编译成功
+./clusterreport --help
 ```
 
-### 步骤 2: 验证安装
+### 步骤 3: 查看项目结构
 
 ```bash
-clusterreport --version
+# 查看核心组件
+ls -la cmd/        # 命令行入口
+ls -la pkg/        # 核心包（collector、analyzer、generator）
+ls -la plugins/    # 插件系统
+ls -la web/        # Web 界面
 ```
 
-预期输出：
+## 📚 理解项目架构
+
+ClusterReport 采用模块化设计：
+
 ```
-ClusterReport version 2.0.0
-Built with NodeProbe Engine v1.0 and PerfSnap Engine v1.0
+采集 (Collector) → 分析 (Analyzer) → 生成 (Generator)
 ```
 
-### 步骤 3: 采集本地数据
+### 核心模块
 
-运行以下命令采集本地系统数据：
+1. **pkg/collector/** - 数据采集器
+   - 系统配置采集（CPU、内存、磁盘、网络）
+   - 集成 NodeProbe 引擎
+   - 集成 PerfSnap 引擎
+
+2. **pkg/analyzer/** - 数据分析器
+   - 多维度指标分析
+   - 智能健康评分
+   - 问题检测和建议
+
+3. **pkg/generator/** - 报告生成器
+   - JSON 格式支持
+   - HTML 报告生成
+   - Markdown 文档生成
+
+4. **plugins/** - 插件系统
+   - MySQL 采集器示例
+   - Redis 采集器示例
+   - 异常检测分析器
+
+## 🛠️ 当前可用功能
+
+### 已实现 ✅
+
+1. **数据结构定义**
+   - 完整的指标数据模型
+   - 采集器接口
+   - 分析器接口
+   - 生成器接口
+
+2. **基础采集功能**
+   - 系统指标采集
+   - 性能数据采集
+
+3. **分析引擎**
+   - 健康评分算法（0-100分）
+   - 问题检测逻辑
+   - 建议生成
+
+4. **报告生成**
+   - JSON 输出
+   - HTML 报告（含CSS）
+   - Markdown 文档
+
+5. **插件示例**
+   - 自定义采集器模板
+   - MySQL/Redis 插件示例
+
+### 开发中 🚧
+
+1. **CLI 命令**
+   - `collect` 命令
+   - `analyze` 命令
+   - `generate` 命令
+   - 配置文件管理
+
+2. **远程采集**
+   - SSH 连接
+   - 多节点支持
+
+3. **完整的报告格式**
+   - PDF 导出
+   - Excel 导出
+
+### 规划中 📋
+
+1. **Server/Agent 架构**
+2. **数据持久化**
+3. **定时任务调度**
+4. **Web 仪表板**
+5. **告警系统**
+
+## 📖 查看代码示例
+
+### 示例 1: 查看采集器代码
 
 ```bash
-clusterreport collect --node localhost
+# 查看系统采集器实现
+cat pkg/collector/system_collector.go
+
+# 查看采集器接口定义
+cat pkg/collector/collector.go
 ```
 
-您将看到类似输出：
-```
-🔍 Starting data collection...
-📊 NodeProbe Engine: Collecting system configuration...
-   ✓ CPU Information
-   ✓ Memory Information
-   ✓ Disk Information
-   ✓ Network Interfaces
-   ✓ OS Information
-⚡ PerfSnap Engine: Collecting performance data...
-   ✓ CPU Metrics
-   ✓ Memory Metrics
-   ✓ Disk I/O
-   ✓ Network Metrics
-✅ Data collection completed!
-💾 Data saved to: cluster-data.json
-```
-
-### 步骤 4: 生成 HTML 报告
+### 示例 2: 查看分析器代码
 
 ```bash
-clusterreport generate --format html --output my-first-report.html
+# 查看分析器实现
+cat pkg/analyzer/analyzer.go
 ```
 
-输出：
-```
-📄 Generating report...
-   ✓ Processing data
-   ✓ Analyzing metrics
-   ✓ Creating visualizations
-   ✓ Rendering HTML
-✅ Report generated: my-first-report.html
-```
-
-### 步骤 5: 查看报告
+### 示例 3: 查看生成器代码
 
 ```bash
-# macOS
-open my-first-report.html
-
-# Linux
-xdg-open my-first-report.html
-
-# 或使用浏览器直接打开
+# 查看报告生成器
+cat pkg/generator/generator.go
 ```
 
-## 🎉 恭喜！
-
-您已经成功生成了第一份集群报告！报告包含：
-
-- 📊 **系统配置概览** - CPU、内存、磁盘、网络配置
-- ⚡ **性能指标** - 实时性能数据和趋势
-- 🔍 **系统分析** - 潜在问题和优化建议
-- 📈 **可视化图表** - 直观的数据展示
-
-## 🔄 完整工作流程
-
-```
-┌──────────────┐
-│   collect    │  采集数据
-│ (NodeProbe + │
-│  PerfSnap)   │
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│    analyze   │  分析数据（可选）
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│   generate   │  生成报告
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ view/share   │  查看/分享报告
-└──────────────┘
-```
-
-## 📝 下一步
-
-### 🎯 监控多个节点
-
-创建配置文件 `cluster.yaml`：
-
-```yaml
-cluster:
-  name: my-cluster
-  nodes:
-    - name: web-01
-      host: 192.168.1.10
-      user: admin
-      ssh_key: ~/.ssh/id_rsa
-    - name: web-02
-      host: 192.168.1.11
-      user: admin
-      ssh_key: ~/.ssh/id_rsa
-    - name: db-01
-      host: 192.168.1.20
-      user: admin
-      ssh_key: ~/.ssh/id_rsa
-
-collectors:
-  - type: system
-    enabled: true
-  - type: performance
-    enabled: true
-```
-
-使用配置文件：
+### 示例 4: 查看插件示例
 
 ```bash
-# 采集所有节点数据
-clusterreport collect --config cluster.yaml
+# MySQL 采集器插件
+cat plugins/collectors/mysql_collector.go
 
-# 生成集群报告
-clusterreport generate --format html --output cluster-report.html
+# Redis 采集器插件
+cat plugins/collectors/redis_collector.go
+
+# 异常检测分析器
+cat plugins/analyzers/anomaly_analyzer.go
 ```
 
-### 🔌 启用更多插件
+## 🔄 参与开发
 
-```yaml
-collectors:
-  - type: system        # 系统配置（NodeProbe）
-    enabled: true
-  - type: performance   # 性能数据（PerfSnap）
-    enabled: true
-  - type: mysql         # MySQL 监控
-    enabled: true
-    config:
-      host: localhost
-      port: 3306
-  - type: redis         # Redis 监控
-    enabled: true
-    config:
-      host: localhost
-      port: 6379
-```
+如果您想参与项目开发，可以：
 
-### 📊 生成不同格式的报告
+### 1. 查看开发计划
 
 ```bash
-# HTML 报告（交互式）
-clusterreport generate --format html --output report.html
+# 查看路线图
+cat ROADMAP.md
 
-# PDF 报告（可打印）
-clusterreport generate --format pdf --output report.pdf
-
-# Excel 报告（数据分析）
-clusterreport generate --format excel --output report.xlsx
-
-# Markdown 报告（可编辑）
-clusterreport generate --format markdown --output report.md
-
-# JSON 数据（API 集成）
-clusterreport generate --format json --output report.json
+# 查看下一步计划
+cat NEXT_STEPS.md
 ```
 
-### 🌐 启动 Web 仪表板
+### 2. 查看待完成任务
+
+根据 [ROADMAP.md](../../ROADMAP.md)，当前优先任务是：
+
+- **阶段 1**: 完善 CLI 模式（v0.8.0）
+  - 实现完整的 collect/analyze/generate 命令
+  - 配置文件管理
+  - 终端输出优化
+
+- **阶段 2**: Server/Agent 架构（v0.9.0）
+  - gRPC 通信
+  - REST API
+  - Agent 管理
+
+### 3. 运行测试
 
 ```bash
-clusterreport serve --port 8080
+# 运行单元测试（如果有）
+go test ./...
+
+# 查看测试覆盖率
+go test -cover ./...
 ```
 
-然后在浏览器访问 `http://localhost:8080`
+## 📚 更多文档
 
-### 📅 设置定时任务
-
-使用 cron 设置每天生成报告：
-
-```bash
-# 编辑 crontab
-crontab -e
-
-# 添加以下行（每天凌晨 2 点执行）
-0 2 * * * cd /path/to/project && clusterreport collect --config cluster.yaml && clusterreport generate --format html --output daily-report.html
-```
-
-## 💡 常见使用场景
-
-### 场景 1: 快速健康检查
-
-```bash
-# 一键检查单个服务器
-clusterreport collect --node production-server && \
-clusterreport generate --format html --output health-check.html && \
-open health-check.html
-```
-
-### 场景 2: 性能问题排查
-
-```bash
-# 启用详细性能分析
-clusterreport collect \
-  --node problem-server \
-  --enable-flamegraph \
-  --duration 60s
-
-clusterreport analyze --focus performance
-clusterreport generate --format pdf --output perf-analysis.pdf
-```
-
-### 场景 3: 容量规划
-
-```bash
-# 收集历史数据
-clusterreport collect \
-  --cluster production \
-  --history 30d
-
-clusterreport analyze --type capacity-planning
-clusterreport generate --format excel --output capacity-plan.xlsx
-```
-
-## 🆘 故障排查
-
-### 问题 1: 连接远程节点失败
-
-**症状**: `Error: Failed to connect to node`
-
-**解决方案**:
-```bash
-# 检查 SSH 连接
-ssh -i ~/.ssh/id_rsa user@host
-
-# 确保 SSH 密钥配置正确
-chmod 600 ~/.ssh/id_rsa
-```
-
-### 问题 2: 权限不足
-
-**症状**: `Error: Permission denied`
-
-**解决方案**:
-```bash
-# 使用 sudo 运行（采集系统信息时需要）
-sudo clusterreport collect --node localhost
-
-# 或添加用户到必要的组
-sudo usermod -aG docker,sudo $USER
-```
-
-### 问题 3: 数据采集超时
-
-**症状**: `Error: Timeout collecting data`
-
-**解决方案**:
-```bash
-# 增加超时时间
-clusterreport collect --node remote-server --timeout 300s
-
-# 或禁用耗时的采集器
-clusterreport collect --node remote-server --disable performance
-```
-
-## 📚 更多资源
-
-- [配置文件详解](configuration.md)
-- [用户指南](../user-guide/)
-- [CLI 命令参考](../reference/cli-reference.md)
-- [示例代码](../../examples/)
+- [ClusterReport 架构](../tools/go/ClusterReport_Architecture.md)
+- [ClusterReport 设计](../tools/go/ClusterReport_Design.md)
+- [开发路线图](../../ROADMAP.md)
+- [下一步计划](../../NEXT_STEPS.md)
+- [旧版工具说明](../../legacy/README.md)
 
 ## 🤝 需要帮助？
 
-- 📖 查看[完整文档](../README.md)
-- 💬 [GitHub Discussions](https://github.com/sunyifei83/devops-toolkit/discussions)
-- 🐛 [报告问题](https://github.com/sunyifei83/devops-toolkit/issues)
+- 📖 查看[项目文档](../README.md)
+- 💬 [GitHub Issues](https://github.com/sunyifei83/devops-toolkit/issues)
 - 📧 Email: sunyifei83@gmail.com
+
+## ⚠️ 重要提示
+
+**本项目正在积极开发中**：
+
+1. ✅ 核心框架已完成，代码结构清晰
+2. 🚧 CLI 工具正在完善，部分命令尚未实现
+3. 📋 完整功能预计 2025年12月发布
+
+如果您对项目感兴趣，欢迎：
+- ⭐ 给项目加星
+- 👀 Watch 项目进展
+- 🤝 参与贡献代码
+- 💡 提出建议和想法
 
 ---
 
-**下一步**: 阅读[配置说明](configuration.md)了解更多配置选项
+**下一步**: 查看 [ROADMAP.md](../../ROADMAP.md) 了解开发计划
 
-**上一步**: [安装指南](installation.md)
+**项目主页**: [README.md](../../README.md)
