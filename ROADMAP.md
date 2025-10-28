@@ -1,397 +1,621 @@
-# ClusterReport 开发路线图
+# ClusterReport Development Roadmap
 
-**项目状态**: 🚧 开发中  
-**当前版本**: v0.7.0 (70% 完成)  
-**目标版本**: v1.0.0  
-**预计发布**: 6周后
-
----
-
-## 📊 当前进展
-
-### ✅ 已完成的功能（v0.7.0）
-
-#### 核心模块
-- ✅ **采集器框架** (`pkg/collector/`)
-  - 完整的指标数据结构
-  - 系统指标采集（CPU、内存、磁盘、网络）
-  - 单元测试框架
-  - 可扩展的采集器接口
-
-- ✅ **智能分析器** (`pkg/analyzer/`)
-  - 多维度指标分析
-  - 智能健康评分算法（0-100分）
-  - 自动问题检测
-  - 智能优化建议生成
-  - 可配置阈值
-
-- ✅ **多格式报告生成器** (`pkg/generator/`)
-  - JSON 格式支持
-  - HTML 精美报告（含完整CSS样式）
-  - Markdown 文档格式
-  - 模板化报告生成
-
-#### 插件系统
-- ✅ **采集器插件**
-  - 自定义采集器示例
-  - MySQL 数据库采集器
-  - Redis 缓存采集器
-  
-- ✅ **分析器插件**
-  - 异常检测分析器
-  - 可扩展分析器框架
-
-#### 前端界面
-- ✅ **Web Dashboard** (`web/dashboard/`)
-  - 现代化响应式设计
-  - 实时监控视图
-  - 交互式数据展示
-  - 自动刷新功能
-  - 状态可视化
-
-#### 基础设施
-- ✅ 项目结构设计
-- ✅ 配置文件框架
-- ✅ 基础 CLI 框架
-- ✅ 完整的文档
-
-**当前完成度: 70%**
+**Last Updated**: 2025-01-28  
+**Current Version**: v0.7.0 (70% Complete)  
+**Target Version**: v1.0.0  
+**Project Repository**: https://github.com/sunyifei83/ClusterReport
 
 ---
 
-## 🎯 开发路线图
+## Overview
 
-### 🔥 阶段 1: CLI 模式增强（v0.8.0）
-**优先级**: ⭐⭐⭐⭐⭐ 最高  
-**预计时间**: 3-5 天  
-**完成后进度**: 85%
+This roadmap outlines the development plan for ClusterReport, from the current state to a production-ready enterprise cluster management and reporting platform. The project follows an iterative, phased approach with clear milestones and deliverables.
 
-#### 目标
-完善命令行工具，使其成为可独立使用的强大工具
+## Project Vision
 
-#### 任务列表
+**Mission**: Create a comprehensive, easy-to-use cluster analysis and reporting tool that integrates hardware configuration discovery, performance monitoring, and intelligent analysis into a unified platform.
 
-**1.1 命令实现**
-- [ ] `clusterreport collect` - 数据采集
-  ```bash
-  # 本地采集
-  clusterreport collect --local
-  
-  # 远程采集（SSH）
-  clusterreport collect --host 192.168.1.100 --user root
-  
-  # 批量采集
-  clusterreport collect --hosts-file hosts.txt
-  
-  # 自定义采集项
-  clusterreport collect --metrics cpu,memory,disk
-  ```
-
-- [ ] `clusterreport analyze` - 数据分析
-  ```bash
-  # 分析采集的数据
-  clusterreport analyze --input metrics.json
-  
-  # 自定义阈值
-  clusterreport analyze --config custom-thresholds.yaml
-  
-  # 指定分析器
-  clusterreport analyze --analyzers performance,security
-  ```
-
-- [ ] `clusterreport generate` - 报告生成
-  ```bash
-  # 生成 HTML 报告
-  clusterreport generate --format html --output report.html
-  
-  # 生成 JSON 报告
-  clusterreport generate --format json --output report.json
-  
-  # 生成 Markdown 报告
-  clusterreport generate --format markdown --output report.md
-  
-  # 使用自定义模板
-  clusterreport generate --template custom.tmpl
-  ```
-
-- [ ] `clusterreport report` - 一键生成完整报告
-  ```bash
-  # 一键生成报告（采集 + 分析 + 生成）
-  clusterreport report --output report.html
-  
-  # 远程主机报告
-  clusterreport report --host 192.168.1.100 --output report.html
-  
-  # 批量主机报告
-  clusterreport report --hosts-file hosts.txt --output-dir reports/
-  
-  # 发送邮件
-  clusterreport report --email admin@example.com
-  ```
-
-**1.2 配置管理**
-- [ ] 完善 `config.yaml` 配置项
-  ```yaml
-  # 采集配置
-  collector:
-    interval: 60s
-    timeout: 30s
-    metrics:
-      - cpu
-      - memory
-      - disk
-      - network
-  
-  # 分析配置
-  analyzer:
-    thresholds:
-      cpu_warning: 70
-      cpu_critical: 90
-      memory_warning: 80
-      memory_critical: 95
-  
-  # 报告配置
-  generator:
-    format: html
-    template: default
-    output: ./reports
-  
-  # SSH 配置
-  ssh:
-    port: 22
-    timeout: 10s
-    key_file: ~/.ssh/id_rsa
-  ```
-
-- [ ] 支持多环境配置
-  ```bash
-  clusterreport --config dev.yaml
-  clusterreport --config prod.yaml
-  ```
-
-- [ ] 配置验证功能
-  ```bash
-  clusterreport config validate
-  clusterreport config show
-  ```
-
-**1.3 用户体验优化**
-- [ ] 彩色终端输出
-  - 成功信息：绿色
-  - 警告信息：黄色
-  - 错误信息：红色
-  - 信息提示：蓝色
-
-- [ ] 进度条显示
-  ```
-  Collecting metrics... [████████████████████] 100% (5/5 hosts)
-  Analyzing data...     [████████████░░░░░░░░]  60%
-  ```
-
-- [ ] 详细日志选项
-  ```bash
-  clusterreport --log-level debug
-  clusterreport --verbose
-  ```
-
-- [ ] 静默模式
-  ```bash
-  clusterreport --silent
-  clusterreport --quiet
-  ```
-
-**交付成果**
-- ✅ 功能完整的 CLI 工具
-- ✅ 完善的配置系统
-- ✅ 友好的用户界面
-- ✅ 详细的命令文档
+**Goals**:
+- Simplify cluster validation and inspection workflows
+- Provide actionable insights through intelligent analysis
+- Support both on-premise and cloud environments
+- Enable extensibility through a robust plugin system
+- Deliver professional-grade reports in multiple formats
 
 ---
 
-### 🚀 阶段 2: Server/Agent 架构（v0.9.0）
-**优先级**: ⭐⭐⭐⭐ 高  
-**预计时间**: 7-10 天  
-**完成后进度**: 95%
+## Current Status (v0.7.0) - 70% Complete
 
-#### 目标
-实现分布式采集架构，支持大规模集群监控
+### ✅ Completed Components
 
-#### 系统架构
+#### 1. Architecture & Design (100%)
+- ✅ Modular architecture defined
+- ✅ Plugin system design
+- ✅ Data flow architecture
+- ✅ API interfaces defined
+- ✅ Comprehensive documentation
 
-```
-┌─────────────────────────────────────┐
-│         Web Dashboard               │
-│      (Browser / Mobile App)         │
-└─────────────┬───────────────────────┘
-              │ HTTP/WebSocket
-┌─────────────▼───────────────────────┐
-│         ClusterReport Server         │
-│  ┌──────────────────────────────┐   │
-│  │   HTTP/WebSocket Server      │   │
-│  │   - Web UI Serving           │   │
-│  │   - REST API                 │   │
-│  │   - Real-time Data Stream    │   │
-│  └──────────┬───────────────────┘   │
-│             │                        │
-│  ┌──────────▼───────────────────┐   │
-│  │      gRPC Server             │   │
-│  │   - Agent Management         │   │
-│  │   - Metrics Collection       │   │
-│  │   - Heartbeat Monitoring     │   │
-│  └──────────┬───────────────────┘   │
-│             │                        │
-│  ┌──────────▼───────────────────┐   │
-│  │    Storage Layer             │   │
-│  │   - Time Series DB           │   │
-│  │   - Report Archive           │   │
-│  │   - Configuration Storage    │   │
-│  └──────────────────────────────┘   │
-└─────────────┬───────────────────────┘
-              │ gRPC (TLS)
-      ┌───────┴────────┬──────────┐
-┌─────▼─────┐  ┌───────▼─────┐  ┌▼──────────┐
-│  Agent 1  │  │   Agent 2   │  │  Agent N  │
-│ (Node 1)  │  │  (Node 2)   │  │ (Node N)  │
-│           │  │             │  │           │
-│ Collector │  │  Collector  │  │ Collector │
-│ Analyzer  │  │  Analyzer   │  │ Analyzer  │
-└───────────┘  └─────────────┘  └───────────┘
-```
+#### 2. Core Framework (100%)
+- ✅ Go module structure
+- ✅ Package organization
+- ✅ Interface definitions
+- ✅ Error handling patterns
+- ✅ Logging framework
 
-#### 任务列表
+#### 3. Legacy Tools (100% - Ready for Integration)
+- ✅ **NodeProbe v1.1.1** - Complete node configuration collection tool
+  - Hardware info (CPU, Memory, Disk, Network)
+  - OS and kernel information
+  - Python/Java environment detection
+  - Kernel module management
+  - System timezone and locale
+  - Multi-format output (Table, JSON, YAML)
+  - Auto-optimization features (CPU governor, timezone)
+- ✅ **PerfSnap v1.1.1** - Complete performance snapshot tool
+  - System load and uptime
+  - CPU statistics (per-core)
+  - Memory usage and swap
+  - Disk I/O statistics
+  - Network traffic monitoring
+  - TCP connection stats
+  - Process monitoring (top CPU consumers)
+  - Real-time monitoring mode
+  - Flame graph generation (perf integration)
+  - Performance issue detection and recommendations
 
-**2.1 Server 端实现**
+#### 4. Data Collector (90% - Integration Needed)
+- ✅ Collector interface
+- ✅ System metrics collector (CPU, Memory, Disk, Network)
+- ✅ Metrics data structures
+- ✅ Local data collection
+- ✅ JSON output support
+- 🚧 **Integrate NodeProbe capabilities**
+- 🚧 **Integrate PerfSnap capabilities**
 
-- [ ] **HTTP/WebSocket Server**
-  ```go
-  // api/rest/server.go
-  - GET  /api/v1/agents              // 获取所有 Agent 列表
-  - GET  /api/v1/agents/:id          // 获取单个 Agent 详情
-  - GET  /api/v1/agents/:id/metrics  // 获取 Agent 指标
-  - POST /api/v1/reports             // 生成报告
-  - GET  /api/v1/reports             // 获取报告列表
-  - GET  /api/v1/reports/:id         // 获取单个报告
-  - GET  /api/v1/health              // 健康检查
-  - WS   /api/v1/ws                  // WebSocket 实时数据
-  ```
+#### 4. Data Analyzer (90%)
+- ✅ Analyzer interface
+- ✅ Health scoring algorithm
+- ✅ Multi-dimensional analysis
+- ✅ Issue detection logic
+- 🚧 Advanced anomaly detection
 
-- [ ] **gRPC Server**
-  ```protobuf
-  // api/grpc/proto/clusterreport.proto
-  
-  service AgentService {
-    rpc Register(RegisterRequest) returns (RegisterResponse);
-    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
-    rpc Unregister(UnregisterRequest) returns (UnregisterResponse);
-  }
-  
-  service MetricsService {
-    rpc ReportMetrics(MetricsRequest) returns (MetricsResponse);
-    rpc StreamMetrics(stream MetricsRequest) returns (stream MetricsResponse);
-  }
-  
-  service ReportService {
-    rpc GenerateReport(ReportRequest) returns (ReportResponse);
-    rpc GetReport(GetReportRequest) returns (GetReportResponse);
-    rpc ListReports(ListReportsRequest) returns (ListReportsResponse);
-  }
-  ```
+#### 5. Report Generator (80%)
+- ✅ Generator interface
+- ✅ HTML report generation
+- ✅ JSON output
+- ✅ Markdown support
+- 🚧 PDF generation
+- 🚧 Excel export
 
-- [ ] **Agent 管理**
-  ```go
-  // pkg/server/agent_manager.go
-  - Agent 注册/注销
-  - 心跳检测（30秒超时）
-  - Agent 状态跟踪
-  - 离线检测和告警
-  ```
+#### 6. Plugin System (70%)
+- ✅ Plugin interface definition
+- ✅ MySQL collector plugin example
+- ✅ Redis collector plugin example
+- ✅ Anomaly analyzer plugin example
+- 🚧 Plugin loader mechanism
+- 🚧 Plugin management CLI
 
-- [ ] **数据接收和存储**
-  ```go
-  - 接收 Agent 上报的指标
-  - 数据验证和清洗
-  - 持久化存储
-  - 数据聚合
-  ```
+#### 7. CLI Framework (60%)
+- ✅ Cobra/Viper integration
+- ✅ Command structure
+- ✅ Basic collect command
+- 🚧 Analyze command implementation
+- 🚧 Generate command implementation
+- 🚧 Report command (one-click)
+- 🚧 Configuration file management
 
-**2.2 Agent 端实现**
+#### 8. Web Dashboard (40%)
+- ✅ HTML/CSS/JS prototype
+- ✅ Basic UI layout
+- 🚧 Interactive features
+- 🚧 Real-time updates
+- 🚧 Report viewing interface
 
-- [ ] **核心功能**
-  ```go
-  // cmd/agent/main.go
-  - 连接到 Server（gRPC + TLS）
-  - 定期数据采集（可配置间隔）
-  - 数据上报（批量/流式）
-  - 心跳保持（每30秒）
-  - 断线重连（指数退避）
-  - 本地缓存（网络中断时）
-  ```
+### 🚧 In Progress
 
-- [ ] **配置管理**
-  ```yaml
-  # agent-config.yaml
-  server:
-    address: server.example.com:9090
-    tls:
-      enabled: true
-      cert_file: /etc/clusterreport/cert.pem
-      key_file: /etc/clusterreport/key.pem
-      ca_file: /etc/clusterreport/ca.pem
-  
-  agent:
-    id: node-01  # 唯一标识
-    name: Web Server 01
-    labels:
-      env: production
-      region: us-west-1
-      role: web
-  
-  collector:
-    interval: 60s
-    timeout: 30s
-    retry: 3
-  
-  cache:
-    enabled: true
-    size: 1000
-    ttl: 1h
-  ```
+- CLI command completion and testing
+- Configuration file management
+- Remote SSH collection
+- Advanced report templates
+- Unit and integration testing
+- **Legacy tools integration into new architecture**
 
-**2.3 安全性**
-- [ ] TLS/SSL 加密通信
-- [ ] Agent 认证（Token/Certificate）
-- [ ] 数据加密存储
-- [ ] 访问控制（RBAC）
+### 📋 Not Started
 
-**交付成果**
-- ✅ 可扩展的 Server/Agent 架构
-- ✅ gRPC 通信协议
-- ✅ 安全的数据传输
-- ✅ 分布式采集能力
+- Server/Agent architecture
+- REST API development
+- Data persistence layer
+- Scheduled task system
+- Alert notification system
+- Docker/Kubernetes deployment
+
+### 🎁 Available Legacy Assets
+
+**NodeProbe.go (v1.1.1)** - Production-ready features:
+- ✅ 20+ system configuration metrics
+- ✅ Hardware detection (dmidecode, lscpu, lsblk)
+- ✅ Auto-optimization (CPU governor, timezone, kernel modules)
+- ✅ Multi-format output (Table, JSON, YAML)
+- ✅ Chinese character alignment support
+- ✅ Beautiful terminal UI with box drawing
+
+**PerfSnap.go (v1.1.1)** - Production-ready features:
+- ✅ 50+ performance metrics collection
+- ✅ Real-time monitoring mode
+- ✅ Concurrent data collection (goroutines)
+- ✅ CPU flame graph generation
+- ✅ Performance issue detection
+- ✅ Optimization recommendations
+- ✅ Integration with sysstat tools (sar, mpstat, iostat, pidstat)
+- ✅ FlameGraph auto-installation
+
+**Integration Strategy**:
+1. **Reuse core collection logic** from both tools
+2. **Wrap with new collector interfaces** for consistency
+3. **Preserve all existing capabilities** while adding new features
+4. **Maintain backward compatibility** with output formats
 
 ---
 
-### 💾 阶段 3: 存储层实现（v0.95.0）
-**优先级**: ⭐⭐⭐ 中高  
-**预计时间**: 5-7 天  
-**完成后进度**: 98%
+## Development Phases
 
-#### 目标
-持久化存储历史数据，支持趋势分析和历史查询
+## Phase 1: CLI Foundation (v0.8.0) - Target: Q2 2025
 
-#### 技术方案
+**Goal**: Complete and polish the CLI tool for local and basic remote usage
 
-**方案对比**
+**Duration**: 8-10 weeks  
+**Status**: 🚧 In Progress
 
-| 特性 | SQLite | InfluxDB | PostgreSQL+TimescaleDB |
-|------|--------|----------|----------------------|
-| 部署复杂度 | ⭐ 极简 | ⭐⭐ 简单 | ⭐⭐⭐ 中等 |
-| 性能 | ⭐⭐ 中等 | ⭐⭐⭐⭐⭐ 优秀 | ⭐⭐⭐⭐ 良好 |
-| 查询能力 | ⭐⭐⭐ 标准SQL | ⭐⭐⭐⭐ InfluxQL | ⭐⭐⭐⭐⭐ 强大SQL |
-| 扩展性 | ⭐⭐ 有限 | ⭐⭐⭐⭐ 良好 | ⭐⭐⭐⭐⭐ 优秀 |
-| 适用场景 | 小规模/嵌入式 | 时序数据专用 | 企业级应用 |
+### Deliverables
 
-**推荐方案**: 
-- 默认使用 **SQLite**（零配置，开箱即用）
-- 可选支持 **InfluxDB**（高性能，大规模部署）
-- 未来扩展 **PostgreSQL + TimescaleDB**（企业级需求
+#### 1.1 Complete CLI Commands (4 weeks)
+- [ ] Finish `collect` command implementation
+  - [ ] **Integrate NodeProbe collection logic** (1 week)
+    - [ ] Wrap NodeProbe functions in new collector interface
+    - [ ] Migrate hardware detection logic
+    - [ ] Preserve auto-optimization features
+    - [ ] Support all output formats (table, JSON, YAML)
+  - [ ] **Integrate PerfSnap collection logic** (1 week)
+    - [ ] Wrap PerfSnap functions in new collector interface
+    - [ ] Migrate performance metrics collection
+    - [ ] Preserve concurrent collection pattern
+    - [ ] Support flame graph generation
+  - [ ] SSH-based remote collection (1 week)
+    - [ ] Execute NodeProbe on remote nodes
+    - [ ] Execute PerfSnap on remote nodes
+    - [ ] Stream results back
+  - [ ] Batch node processing (1 week)
+    - [ ] Parallel execution using existing goroutine patterns
+    - [ ] Progress indicators
+    - [ ] Error handling and retry logic
+
+- [ ] Finish `analyze` command implementation
+  - [ ] Load collected data
+  - [ ] Apply analysis algorithms
+  - [ ] Generate insights and recommendations
+  - [ ] Output analysis results
+
+- [ ] Finish `generate` command implementation
+  - [ ] Template-based report generation
+  - [ ] Multi-format output (HTML, Markdown, JSON)
+  - [ ] Custom branding support
+  - [ ] Report sections configuration
+
+- [ ] Implement `report` command (all-in-one)
+  - [ ] Integrated workflow: collect → analyze → generate
+  - [ ] Single-command execution
+  - [ ] Parallel processing optimization
+
+#### 1.2 Configuration Management (2 weeks)
+- [ ] YAML configuration file support
+- [ ] Cluster definitions
+- [ ] Node inventory management
+- [ ] Default settings and overrides
+- [ ] Environment variable support
+- [ ] Configuration validation
+
+#### 1.3 Enhanced Collectors (2 weeks)
+- [ ] **NodeProbe Integration** (1 week)
+  - [ ] Create `NodeProbeCollector` wrapper
+  - [ ] Port all 20+ system metrics collection
+  - [ ] Port auto-optimization logic (optional mode)
+  - [ ] Add remote execution support
+  - [ ] Preserve YAML/JSON output compatibility
+  
+- [ ] **PerfSnap Integration** (1 week)
+  - [ ] Create `PerfSnapCollector` wrapper
+  - [ ] Port all 50+ performance metrics
+  - [ ] Port concurrent collection (10 goroutines pattern)
+  - [ ] Port flame graph generation
+  - [ ] Add monitoring mode support
+  - [ ] Preserve performance issue detection
+
+#### 1.4 Report Templates (1 week)
+- [ ] Professional HTML template
+- [ ] Executive summary template
+- [ ] Technical detail template
+- [ ] Comparison report template
+- [ ] Custom template support
+
+#### 1.5 Testing & Documentation (1 week)
+- [ ] Unit tests for all commands
+- [ ] Integration tests
+- [ ] CLI usage documentation
+- [ ] Configuration examples
+- [ ] Troubleshooting guide
+
+### Success Criteria
+
+- ✅ All CLI commands fully functional
+- ✅ Configuration file support working
+- ✅ Can collect from 10+ nodes concurrently
+- ✅ HTML and Markdown reports generation
+- ✅ Test coverage > 60%
+- ✅ Complete user documentation
+
+---
+
+## Phase 2: Remote Collection & Advanced Analysis (v0.9.0) - Target: Q3 2025
+
+**Goal**: Robust remote collection and advanced analysis capabilities
+
+**Duration**: 10-12 weeks  
+**Status**: 📋 Planned
+
+### Deliverables
+
+#### 2.1 Advanced SSH Collection (3 weeks)
+- [ ] SSH key-based authentication
+- [ ] SSH agent support
+- [ ] Jump host/bastion support
+- [ ] Connection reuse and pooling
+- [ ] Bandwidth optimization
+- [ ] Compression support
+
+#### 2.2 Enhanced Data Analysis (4 weeks)
+- [ ] Historical trend analysis
+- [ ] Baseline comparison
+- [ ] Anomaly detection algorithms
+- [ ] Performance bottleneck identification
+- [ ] Capacity planning insights
+- [ ] SLA compliance checking
+
+#### 2.3 Advanced Reporting (3 weeks)
+- [ ] PDF report generation
+- [ ] Excel data export
+- [ ] Interactive HTML reports
+- [ ] Chart and visualization library
+- [ ] Custom chart types
+- [ ] Report scheduling
+
+#### 2.4 Plugin Development Kit (2 weeks)
+- [ ] Plugin development guide
+- [ ] Plugin template generator
+- [ ] Plugin testing framework
+- [ ] Example plugins library
+- [ ] Plugin marketplace (design)
+
+### Success Criteria
+
+- ✅ SSH collection from 100+ nodes
+- ✅ Advanced analysis features working
+- ✅ PDF and Excel output supported
+- ✅ Plugin development documented
+- ✅ Test coverage > 70%
+
+---
+
+## Phase 3: Server/Agent Architecture (v1.0.0) - Target: Q4 2025
+
+**Goal**: Production-ready Server/Agent architecture with web interface
+
+**Duration**: 12-16 weeks  
+**Status**: 📋 Planned
+
+### Deliverables
+
+#### 3.1 Server Architecture (5 weeks)
+- [ ] REST API server (Gin framework)
+- [ ] gRPC API for agents
+- [ ] Authentication & authorization (JWT)
+- [ ] User management
+- [ ] Role-based access control (RBAC)
+- [ ] API documentation (Swagger)
+
+#### 3.2 Agent Development (4 weeks)
+- [ ] Lightweight agent binary
+- [ ] Agent registration & heartbeat
+- [ ] Remote command execution
+- [ ] Data streaming to server
+- [ ] Agent auto-update mechanism
+- [ ] Agent monitoring & health check
+
+#### 3.3 Data Persistence (3 weeks)
+- [ ] PostgreSQL integration
+- [ ] Data models and migrations
+- [ ] Historical data storage
+- [ ] Query optimization
+- [ ] Data retention policies
+- [ ] Backup and recovery
+
+#### 3.4 Web Dashboard (4 weeks)
+- [ ] React-based frontend
+- [ ] Cluster management UI
+- [ ] Report viewing interface
+- [ ] Real-time monitoring dashboard
+- [ ] Interactive charts (ECharts)
+- [ ] Report scheduling UI
+- [ ] User settings & preferences
+
+#### 3.5 Deployment & Operations (2 weeks)
+- [ ] Docker images
+- [ ] Docker Compose setup
+- [ ] Kubernetes manifests
+- [ ] Helm charts
+- [ ] Monitoring integration (Prometheus)
+- [ ] Logging integration (ELK/Loki)
+
+### Success Criteria
+
+- ✅ REST API fully functional
+- ✅ Agent communication working
+- ✅ Web dashboard operational
+- ✅ Multi-user support
+- ✅ Docker deployment ready
+- ✅ Test coverage > 75%
+- ✅ Production deployment guide
+
+---
+
+## Phase 4: Enterprise Features (v1.5.0) - Target: Q1-Q2 2026
+
+**Goal**: Enterprise-grade features for large-scale deployments
+
+**Duration**: 16-20 weeks  
+**Status**: 📋 Planned
+
+### Deliverables
+
+#### 4.1 Scheduled Tasks (3 weeks)
+- [ ] Cron-based scheduling
+- [ ] Task queue system
+- [ ] Task management UI
+- [ ] Task history and logs
+- [ ] Failure retry logic
+- [ ] Email notifications
+
+#### 4.2 Alert System (4 weeks)
+- [ ] Alert rule engine
+- [ ] Alert channels (Email, Slack, Webhook)
+- [ ] Alert grouping and suppression
+- [ ] Alert history
+- [ ] Alert dashboard
+- [ ] On-call escalation
+
+#### 4.3 Multi-Cluster Management (4 weeks)
+- [ ] Cluster grouping
+- [ ] Cross-cluster comparison
+- [ ] Cluster tags and metadata
+- [ ] Cluster health overview
+- [ ] Resource inventory
+- [ ] Compliance checking
+
+#### 4.4 Advanced Analytics (4 weeks)
+- [ ] Machine learning integration
+- [ ] Predictive analytics
+- [ ] Capacity forecasting
+- [ ] Cost optimization suggestions
+- [ ] Performance optimization recommendations
+- [ ] Automated remediation suggestions
+
+#### 4.5 Integrations (3 weeks)
+- [ ] Prometheus data source
+- [ ] Grafana dashboards
+- [ ] Zabbix integration
+- [ ] JIRA integration
+- [ ] ServiceNow integration
+- [ ] Custom webhook integrations
+
+#### 4.6 High Availability (2 weeks)
+- [ ] Server clustering
+- [ ] Load balancing
+- [ ] Database replication
+- [ ] Failover mechanisms
+- [ ] Disaster recovery
+
+### Success Criteria
+
+- ✅ Scheduled reports working
+- ✅ Alert system operational
+- ✅ Multi-cluster support
+- ✅ External integrations functional
+- ✅ HA deployment tested
+- ✅ Test coverage > 80%
+
+---
+
+## Phase 5: Scale & Optimization (v2.0.0) - Target: H2 2026
+
+**Goal**: Support large-scale deployments (1000+ nodes)
+
+**Duration**: 16-20 weeks  
+**Status**: 📋 Planned
+
+### Deliverables
+
+#### 5.1 Microservices Architecture
+- [ ] Service decomposition
+- [ ] Service mesh (Istio)
+- [ ] API gateway
+- [ ] Service discovery
+- [ ] Distributed tracing
+
+#### 5.2 Performance Optimization
+- [ ] Database query optimization
+- [ ] Caching strategies (Redis)
+- [ ] CDN integration
+- [ ] Frontend optimization
+- [ ] API rate limiting
+- [ ] Load testing & benchmarking
+
+#### 5.3 Advanced Features
+- [ ] Multi-tenancy support
+- [ ] Custom plugin marketplace
+- [ ] Report templates marketplace
+- [ ] Mobile app (iOS/Android)
+- [ ] AI-powered insights
+- [ ] Natural language queries
+
+#### 5.4 Enterprise Security
+- [ ] SSO integration (SAML, OAuth)
+- [ ] Audit logging
+- [ ] Data encryption at rest
+- [ ] Network security policies
+- [ ] Compliance reports (SOC2, ISO27001)
+- [ ] Vulnerability scanning
+
+### Success Criteria
+
+- ✅ Support 1000+ nodes
+- ✅ Sub-second API response times
+- ✅ 99.9% uptime SLA
+- ✅ Enterprise security certified
+- ✅ Production deployments > 10
+
+---
+
+## Technical Debt & Maintenance
+
+### Continuous Activities
+
+Throughout all phases, we will maintain:
+
+#### Code Quality
+- Regular code reviews
+- Automated linting and formatting
+- Security vulnerability scanning
+- Dependency updates
+- Performance profiling
+
+#### Testing
+- Unit test coverage > target %
+- Integration tests
+- End-to-end tests
+- Performance tests
+- Security tests
+
+#### Documentation
+- API documentation (always current)
+- User guides
+- Administrator guides
+- Developer guides
+- Architecture decision records (ADRs)
+
+#### Community
+- GitHub issue management
+- Pull request reviews
+- Community support
+- Blog posts and tutorials
+- Conference presentations
+
+---
+
+## Release Schedule
+
+| Version | Target Date | Status | Key Features |
+|---------|------------|--------|--------------|
+| v0.7.0 | 2025-01 | ✅ Current | Core framework, basic CLI |
+| v0.8.0 | 2025-04 | 🚧 In Progress | Complete CLI, config management |
+| v0.9.0 | 2025-07 | 📋 Planned | Remote collection, advanced analysis |
+| v1.0.0 | 2025-12 | 📋 Planned | Server/Agent, web dashboard |
+| v1.5.0 | 2026-06 | 📋 Planned | Enterprise features |
+| v2.0.0 | 2026-12 | 📋 Planned | Microservices, scale optimization |
+
+---
+
+## Risk Management
+
+### Identified Risks
+
+| Risk | Impact | Probability | Mitigation |
+|------|--------|-------------|-----------|
+| SSH connectivity issues | High | Medium | Implement robust retry logic, connection pooling |
+| Performance with 1000+ nodes | High | Medium | Early performance testing, optimization |
+| Plugin system complexity | Medium | High | Clear documentation, examples, templates |
+| Third-party integration breaks | Medium | Medium | Version pinning, compatibility tests |
+| Security vulnerabilities | High | Low | Regular security audits, dependency scanning |
+
+---
+
+## Success Metrics
+
+### Key Performance Indicators (KPIs)
+
+#### Technical Metrics
+- **Code Coverage**: > 80% by v1.0
+- **API Response Time**: < 500ms (p95)
+- **Collection Speed**: 100 nodes in < 5 minutes
+- **Report Generation**: < 30 seconds for 100-node report
+
+#### User Metrics
+- **GitHub Stars**: 1000+ by v1.0
+- **Active Users**: 500+ by v1.0
+- **Plugin Count**: 20+ community plugins by v1.5
+- **Documentation Quality**: > 90% user satisfaction
+
+#### Business Metrics
+- **Production Deployments**: 50+ by v1.0
+- **Enterprise Customers**: 10+ by v1.5
+- **Community Contributors**: 50+ by v2.0
+
+---
+
+## Community & Contributions
+
+### How to Contribute
+
+We welcome contributions in all forms:
+
+1. **Code Contributions**
+   - Bug fixes
+   - Feature implementations
+   - Performance improvements
+   - Test coverage
+
+2. **Documentation**
+   - User guides
+   - Tutorials
+   - Translation
+   - API documentation
+
+3. **Community**
+   - Issue reporting
+   - Feature requests
+   - Support for other users
+   - Blog posts and articles
+
+4. **Testing**
+   - Beta testing new features
+   - Platform compatibility testing
+   - Performance testing
+   - Security testing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+---
+
+## Feedback & Updates
+
+This roadmap is a living document and will be updated regularly based on:
+- User feedback and feature requests
+- Technical discoveries and constraints
+- Market and competitive analysis
+- Community contributions
+
+**Last Review**: 2025-01-28  
+**Next Review**: 2025-04-01  
+**Maintained By**: ClusterReport Core Team
+
+---
+
+##

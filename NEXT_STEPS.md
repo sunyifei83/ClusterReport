@@ -1,485 +1,582 @@
-# ClusterReport 下一阶段操作计划
+# ClusterReport - Next Steps and Action Plan
 
-**制定日期**: 2025-10-27  
-**当前版本**: v0.7.0 (70%)  
-**目标版本**: v0.8.0 (85%)  
-**预计时间**: 3-5 天
-
----
-
-## 🎯 阶段目标：CLI 模式增强
-
-完善命令行工具，使其成为可独立使用的强大工具，实现本地和远程系统的采集、分析和报告生成。
-
-## 📋 详细任务清单
-
-### 第 1 天：Collect 命令实现
-
-#### 任务 1.1：本地采集功能
-**文件**: `cmd/cli/collect.go`
-
-```go
-实现内容：
-- [x] 创建 collect 子命令
-- [ ] 实现本地系统指标采集
-  - 调用 pkg/collector MetricsCollector
-  - 采集 CPU、内存、磁盘、网络指标
-- [ ] 输出 JSON 格式数据
-- [ ] 添加进度显示
-- [ ] 错误处理和日志记录
-
-预计时间：3-4 小时
-```
-
-**示例代码框架**:
-```go
-// cmd/cli/collect.go
-func collectLocal(output string) error {
-    collector := collector.NewMetricsCollector(config)
-    
-    // 显示进度
-    fmt.Println("🔍 Collecting system metrics...")
-    
-    metrics, err := collector.CollectMetrics()
-    if err != nil {
-        return fmt.Errorf("failed to collect metrics: %w", err)
-    }
-    
-    // 保存到文件
-    return saveMetrics(metrics, output)
-}
-```
-
-#### 任务 1.2：远程采集功能（SSH）
-**文件**: `pkg/collector/remote.go`
-
-```go
-实现内容：
-- [ ] SSH 连接管理
-- [ ] 远程命令执行
-- [ ] 数据传输和解析
-- [ ] 连接超时处理
-- [ ] 认证（密钥/密码）
-
-预计时间：4-5 小时
-```
-
-#### 任务 1.3：批量采集功能
-**文件**: `cmd/cli/collect.go`
-
-```go
-实现内容：
-- [ ] 读取主机列表文件
-- [ ] 并发采集（goroutine pool）
-- [ ] 进度条显示
-- [ ] 失败重试机制
-- [ ] 结果汇总
-
-预计时间：3-4 小时
-```
+**Document Version**: 1.0  
+**Last Updated**: 2025-01-28  
+**Current Project Version**: v0.7.0 (70% Complete)  
+**Next Milestone**: v0.8.0 - CLI Foundation (Target: Q2 2025)
 
 ---
 
-### 第 2 天：Analyze 命令实现
+## Executive Summary
 
-#### 任务 2.1：数据分析命令
-**文件**: `cmd/cli/analyze.go`
+ClusterReport has reached 70% completion with solid architectural foundation, core packages, and basic CLI framework in place. The immediate focus for the next phase (v0.8.0) is to **complete and polish the CLI tool** to make it fully functional for production use in local and remote scenarios.
 
-```go
-实现内容：
-- [ ] 创建 analyze 子命令
-- [ ] 从文件加载采集数据
-- [ ] 调用智能分析器
-- [ ] 输出分析结果
-- [ ] 支持自定义阈值
+**Priority**: Complete CLI commands, configuration management, and basic remote collection capabilities.
 
-预计时间：2-3 小时
+---
+
+## Immediate Priorities (Next 2-4 Weeks)
+
+### 🎯 Priority 1: Integrate Legacy Tools into CLI `collect` Command (Week 1-2)
+
+**Goal**: Integrate NodeProbe and PerfSnap capabilities into the new ClusterReport architecture.
+
+#### Tasks
+
+1. **Integrate NodeProbe.go** (5 days)
+   - [ ] Create `pkg/collector/nodeprobe_collector.go` wrapper
+   - [ ] Port hardware collection functions:
+     - [ ] CPU info (model, cores, run mode, performance mode)
+     - [ ] Memory info (total, slots with dmidecode)
+     - [ ] Disk info (system disk, data disks with lsblk)
+     - [ ] Network interfaces (status, speed, IP)
+     - [ ] OS and kernel info
+     - [ ] Python/Java environment
+     - [ ] Timezone detection and auto-correction
+     - [ ] Kernel modules (nf_conntrack, br_netfilter)
+   - [ ] Port auto-optimization features (make optional):
+     - [ ] CPU governor auto-adjustment (powersave → performance)
+     - [ ] Timezone auto-calibration to Asia/Shanghai
+     - [ ] Kernel module auto-loading
+   - [ ] Preserve multi-format output (Table, JSON, YAML)
+   - [ ] Add unit tests for NodeProbe wrapper
+   - [ ] Test Chinese character display width calculation
+
+2. **Integrate PerfSnap.go** (5 days)
+   - [ ] Create `pkg/collector/perfsnap_collector.go` wrapper
+   - [ ] Port performance collection functions:
+     - [ ] System uptime and load average
+     - [ ] VMStat metrics (run queue, context switches, interrupts)
+     - [ ] MPStat per-core CPU statistics
+     - [ ] PIDStat process CPU usage
+     - [ ] IOStat disk I/O metrics (fixed v1.1.1 parsing)
+     - [ ] Memory usage (free command)
+     - [ ] Network stats (sar -n DEV)
+     - [ ] TCP connection stats (ss, sar -n TCP)
+     - [ ] Top processes by CPU/memory
+     - [ ] Dmesg error collection
+   - [ ] Port concurrent collection pattern (10 goroutines)
+   - [ ] Port performance issue detection logic
+   - [ ] Port optimization recommendations engine
+   - [ ] Add unit tests for PerfSnap wrapper
+   - [ ] Test with various Linux distributions
+
+3. **CLI Integration** (2-3 days)
+   - [ ] Update `cmd/cli/collector_wrapper.go` to use new collectors
+   - [ ] Add flags for NodeProbe vs PerfSnap collection
+     ```bash
+     --collect-config    # Run NodeProbe collection
+     --collect-perf      # Run PerfSnap collection
+     --collect-all       # Run both (default)
+     ```
+   - [ ] Add flame graph generation option
+     ```bash
+     --flame-graph       # Generate CPU flame graph
+     --flame-pid <pid>   # Target specific process
+     --flame-duration <seconds>
+     ```
+   - [ ] Implement progress indicators
+   - [ ] Handle collection errors gracefully
+
+**Deliverables**:
+```bash
+# Working commands with legacy tool integration:
+./clusterreport collect --nodes localhost
+./clusterreport collect --nodes localhost --collect-config  # NodeProbe only
+./clusterreport collect --nodes localhost --collect-perf    # PerfSnap only
+./clusterreport collect --nodes localhost --flame-graph     # With flame graph
+./clusterreport collect --nodes node1,node2,node3 --parallel 5
+./clusterreport collect --cluster production --output collected_data.json
 ```
 
-**示例代码**:
-```go
-// cmd/cli/analyze.go
-func analyzeMetrics(inputFile, outputFile string, config AnalyzeConfig) error {
-    // 加载指标数据
-    metrics, err := loadMetrics(inputFile)
-    if err != nil {
-        return err
-    }
-    
-    // 执行分析
-    analyzer := analyzer.NewAnalyzer(config)
-    result, err := analyzer.Analyze(metrics)
-    if err != nil {
-        return err
-    }
-    
-    // 输出结果
-    return saveAnalysisResult(result, outputFile)
-}
-```
+**Acceptance Criteria**:
+- ✅ NodeProbe collection working (20+ metrics)
+- ✅ PerfSnap collection working (50+ metrics)
+- ✅ Can collect from local system
+- ✅ Auto-optimization features available (optional flag)
+- ✅ Flame graph generation working
+- ✅ Performance issue detection and recommendations
+- ✅ Multi-format output (JSON, YAML, Table)
+- ✅ Proper error handling and reporting
 
-#### 任务 2.2：配置文件支持
-**文件**: `pkg/config/config.go`
+---
 
-```go
-实现内容：
-- [ ] 读取 YAML 配置文件
-- [ ] 配置验证
-- [ ] 默认值处理
-- [ ] 环境变量覆盖
+### 🎯 Priority 2: Configuration File Management (Week 2-3)
 
-预计时间：2-3 小时
-```
+**Goal**: Implement robust YAML configuration file support.
 
-**配置文件示例**:
+#### Tasks
+
+1. **Configuration Structure** (2 days)
+   - [ ] Define complete YAML schema
+   - [ ] Add validation rules
+   - [ ] Implement config file loading
+   - [ ] Add environment variable override support
+   - [ ] Create example configuration files
+
+2. **Cluster & Node Management** (2 days)
+   - [ ] Implement cluster definitions
+   - [ ] Add node inventory management
+   - [ ] Support node grouping and tagging
+   - [ ] Add SSH configuration per node/cluster
+   - [ ] Implement credential management
+
+3. **Configuration Commands** (2 days)
+   - [ ] Add `config validate` command
+   - [ ] Add `config show` command
+   - [ ] Add `config init` command (generate template)
+   - [ ] Test configuration merging (file + CLI flags)
+
+**Deliverables**:
 ```yaml
-# config.yaml
+# config.yaml example
+clusters:
+  - name: production
+    nodes:
+      - node1.example.com
+      - node2.example.com
+    ssh_key: ~/.ssh/id_rsa
+    username: admin
+    
+  - name: staging
+    nodes:
+      - staging1.example.com
+    ssh_key: ~/.ssh/staging_key
+
+output:
+  directory: ./reports
+  formats: [html, json, markdown]
+  
 collector:
-  timeout: 30s
+  parallel: 10
+  timeout: 5m
   retry: 3
-  
-analyzer:
-  thresholds:
-    cpu_warning: 70
-    cpu_critical: 90
-    memory_warning: 80
-    memory_critical: 95
-    disk_warning: 80
-    disk_critical: 90
-  
-  scoring:
-    enabled: true
-    weight:
-      cpu: 30
-      memory: 30
-      disk: 25
-      network: 15
 ```
+
+**Acceptance Criteria**:
+- ✅ Can load and parse YAML config
+- ✅ Can validate configuration
+- ✅ CLI flags override config file settings
+- ✅ Support multiple clusters in one config
+- ✅ Clear error messages for invalid config
 
 ---
 
-### 第 3 天：Generate 命令实现
+### 🎯 Priority 3: Complete `analyze` Command (Week 3-4)
 
-#### 任务 3.1：报告生成命令
-**文件**: `cmd/cli/generate.go`
+**Goal**: Implement data analysis functionality.
 
-```go
-实现内容：
-- [ ] 创建 generate 子命令
-- [ ] 支持多格式输出（HTML/JSON/Markdown）
-- [ ] 模板选择
-- [ ] 自定义标题和描述
-- [ ] 美化输出
+#### Tasks
 
-预计时间：3-4 小时
+1. **Load Collected Data** (2 days)
+   - [ ] Read JSON data files
+   - [ ] Validate data structure
+   - [ ] Support multiple input files
+   - [ ] Merge data from multiple collections
+
+2. **Apply Analysis Logic** (3 days)
+   - [ ] Integrate existing analyzer package
+   - [ ] Implement health scoring
+   - [ ] Add multi-dimensional analysis
+   - [ ] Generate issue detection
+   - [ ] Create recommendations
+
+3. **Analysis Output** (2 days)
+   - [ ] Format analysis results
+   - [ ] Save analysis to JSON
+   - [ ] Display summary in terminal
+   - [ ] Support different verbosity levels
+
+**Deliverables**:
+```bash
+# Working commands:
+./clusterreport analyze --input collected_data.json
+./clusterreport analyze --input collected_data.json --output analysis.json
+./clusterreport analyze --input *.json --baseline production_baseline.json
 ```
 
-**示例代码**:
-```go
-// cmd/cli/generate.go
-func generateReport(input, output, format string) error {
-    // 加载分析结果
-    analysis, err := loadAnalysis(input)
-    if err != nil {
-        return err
-    }
-    
-    // 选择生成器
-    var gen generator.Generator
-    switch format {
-    case "html":
-        gen, _ = generator.NewHTMLGenerator()
-    case "json":
-        gen = generator.NewJSONGenerator()
-    case "markdown":
-        gen = generator.NewMarkdownGenerator()
-    }
-    
-    // 生成报告
-    report, err := gen.Generate(analysis)
-    if err != nil {
-        return err
-    }
-    
-    return os.WriteFile(output, report, 0644)
-}
-```
-
-#### 任务 3.2：Report 一键命令
-**文件**: `cmd/cli/report.go`
-
-```go
-实现内容：
-- [ ] 集成 collect + analyze + generate
-- [ ] 一键生成完整报告
-- [ ] 清理临时文件
-- [ ] 支持邮件发送（可选）
-
-预计时间：2-3 小时
-```
+**Acceptance Criteria**:
+- ✅ Can load collected data
+- ✅ Performs health scoring
+- ✅ Detects issues and anomalies
+- ✅ Generates recommendations
+- ✅ Outputs structured analysis results
 
 ---
 
-### 第 4 天：用户体验优化
+## Short-Term Goals (4-10 Weeks)
 
-#### 任务 4.1：彩色终端输出
-**文件**: `pkg/ui/color.go`
+### Week 4-6: Report Generation
 
-```go
-实现内容：
-- [ ] 使用 fatih/color 库
-- [ ] 成功信息（绿色）
-- [ ] 警告信息（黄色）
-- [ ] 错误信息（红色）
-- [ ] 信息提示（蓝色）
+1. **Complete `generate` Command**
+   - [ ] Implement HTML report generation
+   - [ ] Add Markdown report output
+   - [ ] Ensure JSON output works
+   - [ ] Create professional HTML template
+   - [ ] Add CSS styling and responsive design
 
-预计时间：2 小时
-```
+2. **Report Templates**
+   - [ ] Design executive summary template
+   - [ ] Create detailed technical template
+   - [ ] Add comparison report template
+   - [ ] Implement template selection logic
 
-**示例代码**:
-```go
-package ui
+3. **Chart Integration** (if time allows)
+   - [ ] Research Go charting libraries
+   - [ ] Add basic charts to HTML reports
+   - [ ] Implement data visualization for metrics
 
-import "github.com/fatih/color"
+### Week 7-8: One-Click `report` Command
 
-var (
-    Success = color.New(color.FgGreen).SprintFunc()
-    Warning = color.New(color.FgYellow).SprintFunc()
-    Error   = color.New(color.FgRed).SprintFunc()
-    Info    = color.New(color.FgBlue).SprintFunc()
-)
+1. **Integrated Workflow**
+   - [ ] Combine collect → analyze → generate
+   - [ ] Implement single command execution
+   - [ ] Add progress tracking across phases
+   - [ ] Handle errors in pipeline
 
-func PrintSuccess(msg string) {
-    fmt.Printf("✅ %s\n", Success(msg))
-}
+2. **Optimization**
+   - [ ] Parallel processing where possible
+   - [ ] Optimize memory usage
+   - [ ] Add caching for repeated operations
 
-func PrintError(msg string) {
-    fmt.Printf("❌ %s\n", Error(msg))
-}
-```
+### Week 9-10: Testing & Documentation
 
-#### 任务 4.2：进度条显示
-**文件**: `pkg/ui/progress.go`
+1. **Testing**
+   - [ ] Write unit tests for all commands
+   - [ ] Add integration tests
+   - [ ] Test on different environments
+   - [ ] Performance testing with many nodes
 
-```go
-实现内容：
-- [ ] 使用 schollz/progressbar 库
-- [ ] 采集进度条
-- [ ] 分析进度条
-- [ ] 批量操作进度
-
-预计时间：2-3 小时
-```
-
-**示例代码**:
-```go
-package ui
-
-import "github.com/schollz/progressbar/v3"
-
-func NewProgressBar(max int, description string) *progressbar.ProgressBar {
-    return progressbar.NewOptions(max,
-        progressbar.OptionEnableColorCodes(true),
-        progressbar.OptionShowBytes(false),
-        progressbar.OptionSetWidth(40),
-        progressbar.OptionSetDescription(description),
-        progressbar.OptionSetTheme(progressbar.Theme{
-            Saucer:        "[green]=[reset]",
-            SaucerHead:    "[green]>[reset]",
-            SaucerPadding: " ",
-            BarStart:      "[",
-            BarEnd:        "]",
-        }),
-    )
-}
-```
-
-#### 任务 4.3：日志系统
-**文件**: `pkg/log/logger.go`
-
-```go
-实现内容：
-- [ ] 使用 sirupsen/logrus 库
-- [ ] 日志级别控制
-- [ ] 文件日志输出
-- [ ] 结构化日志
-- [ ] 日志轮转
-
-预计时间：2-3 小时
-```
+2. **Documentation**
+   - [ ] Complete CLI usage guide
+   - [ ] Write configuration guide
+   - [ ] Add troubleshooting section
+   - [ ] Create video tutorials (optional)
 
 ---
 
-### 第 5 天：测试和文档
+## Medium-Term Goals (3-6 Months) - v0.9.0
 
-#### 任务 5.1：单元测试
-**文件**: `cmd/cli/*_test.go`
+### Advanced Features
 
-```go
-测试内容：
-- [ ] collect 命令测试
-- [ ] analyze 命令测试
-- [ ] generate 命令测试
-- [ ] report 命令测试
-- [ ] 配置加载测试
-- [ ] 错误处理测试
+1. **Enhanced SSH Collection**
+   - Jump host/bastion support
+   - SSH agent integration
+   - Connection optimization
 
-目标覆盖率：>80%
-预计时间：4-5 小时
-```
+2. **Advanced Analysis**
+   - Historical trend analysis
+   - Baseline comparison
+   - Anomaly detection algorithms
+   - Capacity planning
 
-#### 任务 5.2：集成测试
-**文件**: `cmd/cli/integration_test.go`
+3. **Advanced Reporting**
+   - PDF generation
+   - Excel export
+   - Interactive HTML reports
+   - Custom chart types
 
-```go
-测试内容：
-- [ ] 端到端流程测试
-- [ ] 多格式报告生成
-- [ ] 批量采集测试
-- [ ] 配置文件测试
-
-预计时间：2-3 小时
-```
-
-#### 任务 5.3：文档更新
-**文件**: `docs/cli-guide.md`
-
-```markdown
-文档内容：
-- [ ] CLI 使用指南
-- [ ] 命令参考手册
-- [ ] 配置文件说明
-- [ ] 常见问题（FAQ）
-- [ ] 示例脚本
-
-预计时间：2-3 小时
-```
+4. **Plugin System**
+   - Plugin development guide
+   - Plugin template generator
+   - Example plugins library
+   - Plugin CLI management
 
 ---
 
-## 🔧 技术实现细节
+## Long-Term Vision (6-12 Months) - v1.0.0
 
-### 依赖库添加
+### Server/Agent Architecture
+
+1. **Server Development**
+   - REST API server
+   - Web dashboard
+   - User authentication
+   - Database integration
+
+2. **Agent Development**
+   - Lightweight agent
+   - Agent communication
+   - Remote management
+
+3. **Enterprise Features**
+   - Scheduled tasks
+   - Alert system
+   - Multi-cluster management
+   - Third-party integrations
+
+---
+
+## Quick Wins (Can be done anytime)
+
+These are small improvements that can be done in parallel with main development:
+
+1. **Legacy Tool Preservation** (High Priority)
+   - [ ] Move NodeProbe.go to `legacy/` directory (Done)
+   - [ ] Move PerfSnap.go to `legacy/` directory (Done)
+   - [ ] Document legacy tool capabilities in `legacy/README.md`
+   - [ ] Create migration guide from legacy to new CLI
+   - [ ] Ensure backward compatibility with old output formats
+
+2. **Code Quality** (Ongoing)
+   - [ ] Add linting configuration (golangci-lint)
+   - [ ] Format all code (gofmt, goimports)
+   - [ ] Add pre-commit hooks
+   - [ ] Document public APIs
+   - [ ] Refactor NodeProbe/PerfSnap code for better modularity
+
+3. **Developer Experience**
+   - [ ] Add Makefile for common tasks
+     ```makefile
+     build-legacy:    # Build old NodeProbe/PerfSnap
+     build-new:       # Build new ClusterReport
+     test-integration: # Test legacy integration
+     ```
+   - [ ] Create development guide
+   - [ ] Add VS Code debug configurations
+   - [ ] Set up CI/CD pipeline (GitHub Actions)
+
+4. **User Experience**
+   - [ ] Add colored terminal output (preserve NodeProbe's box drawing)
+   - [ ] Improve error messages
+   - [ ] Add shell completion scripts
+   - [ ] Create quick start examples
+   - [ ] Add migration tool for users of old NodeProbe/PerfSnap
+
+5. **Documentation**
+   - [ ] Add code examples to README
+   - [ ] Create FAQ document
+   - [ ] Record demo video showing legacy integration
+   - [ ] Write blog post about project
+   - [ ] Document all 70+ metrics collected from both tools
+
+---
+
+## Development Workflow
+
+### Daily Development Cycle
 
 ```bash
-# 在 go.mod 中添加以下依赖
-go get github.com/spf13/cobra@latest
-go get github.com/spf13/viper@latest
-go get github.com/fatih/color@latest
-go get github.com/schollz/progressbar/v3@latest
-go get github.com/sirupsen/logrus@latest
-go get golang.org/x/crypto/ssh@latest
+# 1. Pull latest changes
+git pull origin main
+
+# 2. Create feature branch
+git checkout -b feature/your-feature-name
+
+# 3. Make changes and test
+go build -o clusterreport ./cmd/cli
+./clusterreport your-command --test
+
+# 4. Run tests
+go test ./...
+
+# 5. Format and lint
+go fmt ./...
+golangci-lint run
+
+# 6. Commit and push
+git add .
+git commit -m "Add: your feature description"
+git push origin feature/your-feature-name
+
+# 7. Create Pull Request
+# Open GitHub and create PR from your branch
 ```
 
-### 目录结构调整
+### Weekly Review
 
-```
-cmd/cli/
-├── main.go              # 主入口
-├── collect.go           # collect 命令
-├── analyze.go           # analyze 命令
-├── generate.go          # generate 命令
-├── report.go            # report 命令（一键）
-├── config.go            # config 子命令
-└── root.go              # 根命令配置
-
-pkg/
-├── ui/                  # 用户界面
-│   ├── color.go        # 彩色输出
-│   ├── progress.go     # 进度条
-│   └── spinner.go      # 加载动画
-├── log/                 # 日志系统
-│   └── logger.go
-└── ssh/                 # SSH 客户端
-    └── client.go
-```
-
-### 命令行参数设计
-
-```bash
-# collect 命令
-clusterreport collect [flags]
-  --local                    # 本地采集（默认）
-  --host string              # 远程主机
-  --hosts-file string        # 主机列表文件
-  --user string              # SSH 用户名
-  --key string               # SSH 密钥路径
-  --password string          # SSH 密码
-  --port int                 # SSH 端口（默认22）
-  --timeout duration         # 超时时间（默认30s）
-  --output string            # 输出文件
-  --format string            # 输出格式（json）
-  --parallel int             # 并发数（默认10）
-  --verbose                  # 详细输出
-  --quiet                    # 静默模式
-
-# analyze 命令
-clusterreport analyze [flags]
-  --input string             # 输入文件（必需）
-  --output string            # 输出文件
-  --config string            # 配置文件
-  --threshold float          # 全局阈值
-  --cpu-warning int          # CPU 警告阈值
-  --cpu-critical int         # CPU 严重阈值
-  --memory-warning int       # 内存警告阈值
-  --memory-critical int      # 内存严重阈值
-  --verbose                  # 详细输出
-
-# generate 命令
-clusterreport generate [flags]
-  --input string             # 输入文件（必需）
-  --output string            # 输出文件（必需）
-  --format string            # 格式（html/json/markdown）
-  --template string          # 模板文件
-  --title string             # 报告标题
-  --description string       # 报告描述
-  --open                     # 生成后自动打开
-
-# report 命令（一键生成）
-clusterreport report [flags]
-  --host string              # 单个主机
-  --hosts-file string        # 主机列表
-  --output-dir string        # 输出目录
-  --formats strings          # 输出格式列表
-  --email string             # 发送邮件地址
-  --config string            # 配置文件
-  --parallel int             # 并发数
-```
+Every week:
+1. Review completed tasks
+2. Update NEXT_STEPS.md
+3. Update ROADMAP.md if needed
+4. Plan next week's priorities
+5. Document any blockers or issues
 
 ---
 
-## ✅ 验收标准
+## Resource Allocation
 
-### 功能完整性
-- [ ] 本地采集正常工作
-- [ ] 远程采集（SSH）正常工作
-- [ ] 批量采集支持至少10个主机
-- [ ] 分析功能输出正确结果
-- [ ] 支持 HTML、JSON、Markdown 三种格式
-- [ ] 一键报告命令可用
+### Time Estimates
 
-### 性能要求
-- [ ] 单机采集时间 < 5秒
-- [ ] 10台主机并发采集时间 < 30秒
-- [ ] HTML 报告生成时间 < 2秒
-- [ ] 内存占用 < 100MB
+| Phase | Duration | FTE | Total Hours |
+|-------|----------|-----|-------------|
+| Priority 1: Collect Command | 2 weeks | 1.0 | 80h |
+| Priority 2: Configuration | 1 week | 1.0 | 40h |
+| Priority 3: Analyze Command | 1 week | 1.0 | 40h |
+| Report Generation | 2 weeks | 1.0 | 80h |
+| One-Click Report | 2 weeks | 1.0 | 80h |
+| Testing & Documentation | 2 weeks | 1.0 | 80h |
+| **Total for v0.8.0** | **10 weeks** | **1.0** | **400h** |
 
-### 用户体验
-- [ ] 命令行输出有彩色显示
-- [ ] 长时间操作有进度条
-- [ ] 错误信息清晰明确
-- [ ] 帮助文档完整
+### Skills Needed
 
-### 代码质量
-- [ ] 单元测试覆盖率 > 80%
-- [ ] 所有公开函数有注释
-- [ ] 没有 golint 警告
-- [ ] 没有已知的 bug
+- **Go Development**: Primary skill
+- **Systems Programming**: For data collection
+- **SSH/Networking**: For remote collection
+- **YAML/Config**: For configuration management
+- **Testing**: Unit and integration testing
+- **Documentation**: Technical writing
 
 ---
 
-## 📊 进度跟踪
+## Success Criteria for v0.8.0
 
-| 日期 | 任务 | 状态 | 完成度 | 备注 |
-|------|------|------|---------|------|
-|
+### Functional Requirements
+
+- ✅ All CLI commands work as documented
+- ✅ Can collect data from 10+ nodes simultaneously
+- ✅ Configuration file support fully implemented
+- ✅ Reports generated in HTML, JSON, and Markdown
+- ✅ Error handling and recovery mechanisms work
+- ✅ Comprehensive user documentation available
+
+### Quality Requirements
+
+- ✅ Unit test coverage > 60%
+- ✅ No critical bugs
+- ✅ Performance: 100 nodes in < 5 minutes
+- ✅ Memory usage < 500MB for typical workloads
+- ✅ Clean code passing linter checks
+
+### User Experience
+
+- ✅ Intuitive command-line interface
+- ✅ Helpful error messages
+- ✅ Progress indicators for long operations
+- ✅ Complete help documentation (--help)
+- ✅ Quick start guide works end-to-end
+
+---
+
+## Blockers and Dependencies
+
+### Current Blockers
+
+1. **None identified** - Development can proceed
+
+### External Dependencies
+
+1. **Go Libraries**
+   - golang.org/x/crypto/ssh (SSH client)
+   - github.com/spf13/cobra (CLI framework) ✅
+   - github.com/spf13/viper (Configuration) ✅
+   - gopkg.in/yaml.v3 (YAML parsing)
+
+2. **System Tools (for legacy integration)**
+   - **NodeProbe Requirements**:
+     - dmidecode (memory slot detection)
+     - lscpu (CPU information)
+     - lsblk (disk information)
+     - ethtool (network speed)
+     - timedatectl (timezone management)
+   - **PerfSnap Requirements**:
+     - sysstat package (sar, mpstat, iostat, pidstat)
+     - perf (for flame graph generation)
+     - FlameGraph toolkit (auto-installed by PerfSnap)
+
+3. **Testing Environment**
+   - Multiple Linux VMs for testing
+   - SSH access to test nodes
+   - Various Linux distributions for compatibility testing
+   - Root/sudo access for full feature testing
+
+### Risk Mitigation
+
+| Risk | Impact | Mitigation |
+|------|--------|-----------|
+| SSH connectivity complexity | Medium | Start with basic implementation, iterate |
+| Performance with many nodes | Medium | Early performance testing, optimize as needed |
+| Time overruns | Low | Prioritize must-have features, defer nice-to-haves |
+
+---
+
+## Communication Plan
+
+### Status Updates
+
+- **Daily**: Update GitHub project board
+- **Weekly**: Team sync meeting (if applicable)
+- **Bi-weekly**: Update NEXT_STEPS.md
+- **Monthly**: Publish progress blog post
+
+### Stakeholder Communication
+
+- **Community**: GitHub discussions and issues
+- **Contributors**: PR reviews and feedback
+- **Users**: Release notes and changelogs
+
+---
+
+## Getting Started Today
+
+### For New Contributors
+
+1. **Set up development environment**
+   ```bash
+   git clone https://github.com/sunyifei83/ClusterReport.git
+   cd ClusterReport
+   go mod download
+   
+   # Build new ClusterReport
+   go build -o clusterreport ./cmd/cli
+   
+   # Test legacy tools (for reference)
+   go build -o nodeprobe legacy/NodeProbe.go
+   go build -o perfsnap legacy/PerfSnap.go
+   ./nodeprobe --help
+   ./perfsnap --help
+   ```
+
+2. **Understand the legacy tools**
+   - Run NodeProbe to see what metrics it collects
+   - Run PerfSnap to understand performance analysis
+   - Study the output formats and data structures
+   - Understand the auto-optimization features
+
+3. **Pick a task from Priority 1, 2, or 3**
+   - **High Priority**: Legacy tool integration tasks
+   - Check GitHub issues for "legacy-integration" label
+   - Check for "good first issue" label
+   - Comment on issue to claim it
+   - Create feature branch and start coding
+
+4. **Read the documentation**
+   - [Architecture](docs/tools/go/ClusterReport_Architecture.md)
+   - [Design](docs/tools/go/ClusterReport_Design.md)
+   - [Legacy Tools Guide](legacy/README.md)
+   - [Contributing](CONTRIBUTING.md)
+
+### For Maintainers
+
+1. **Review and update priorities** based on:
+   - User feedback
+   - Technical discoveries
+   - Resource availability
+
+2. **Manage GitHub project board**
+   - Create issues for each task
+   - Label appropriately
+   - Assign to milestones
+
+3. **Review PRs promptly**
+   - Aim for 24-48 hour review turnaround
+   - Provide constructive feedback
+   - Merge when ready
+
+---
+
+## Questions or Feedback?
+
+If you have questions about these next steps or want to provide feedback:
+
+- **GitHub Issues**: https://github.com/sunyifei83/ClusterReport/issues
+- **GitHub Discussions**: https://github.com/sunyifei83/ClusterReport/discussions
+- **Email**: sunyifei83@gmail.com
+
+---
+
+**Remember**: This is a living document. Update it regularly as priorities change and progress is made!
+
+**Last Updated**: 2025-01-28  
+**Next Review**: 2025-02-11 (2 weeks)  
+**Document Owner**: ClusterReport Core Team
