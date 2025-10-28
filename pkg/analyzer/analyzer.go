@@ -187,31 +187,31 @@ func (ba *BaseAnalyzer) analyzeDisk(metrics *collector.SystemMetrics, result *An
 	for _, disk := range metrics.Disk {
 		diskUsage := disk.UsedPercent
 
-		metricKey := fmt.Sprintf("disk_usage_%s", disk.Mountpoint)
+		metricKey := fmt.Sprintf("disk_usage_%s", disk.MountPoint)
 		result.Metrics[metricKey] = diskUsage
 
 		if diskUsage >= ba.config.DiskCriticalThreshold {
 			result.Issues = append(result.Issues, Issue{
 				Severity:    "critical",
 				Category:    "disk",
-				Description: fmt.Sprintf("磁盘 %s 使用率严重过高", disk.Mountpoint),
+				Description: fmt.Sprintf("磁盘 %s 使用率严重过高", disk.MountPoint),
 				Value:       fmt.Sprintf("%.2f%%", diskUsage),
 				Threshold:   fmt.Sprintf("%.2f%%", ba.config.DiskCriticalThreshold),
 			})
 			result.Score -= 20
 			result.Suggestions = append(result.Suggestions,
-				fmt.Sprintf("清理 %s 上的日志和临时文件，或扩展磁盘空间", disk.Mountpoint))
+				fmt.Sprintf("清理 %s 上的日志和临时文件，或扩展磁盘空间", disk.MountPoint))
 		} else if diskUsage >= ba.config.DiskWarningThreshold {
 			result.Issues = append(result.Issues, Issue{
 				Severity:    "warning",
 				Category:    "disk",
-				Description: fmt.Sprintf("磁盘 %s 使用率偏高", disk.Mountpoint),
+				Description: fmt.Sprintf("磁盘 %s 使用率偏高", disk.MountPoint),
 				Value:       fmt.Sprintf("%.2f%%", diskUsage),
 				Threshold:   fmt.Sprintf("%.2f%%", ba.config.DiskWarningThreshold),
 			})
 			result.Score -= 10
 			result.Suggestions = append(result.Suggestions,
-				fmt.Sprintf("监控 %s 磁盘使用，计划清理策略", disk.Mountpoint))
+				fmt.Sprintf("监控 %s 磁盘使用，计划清理策略", disk.MountPoint))
 		}
 	}
 }
