@@ -1,0 +1,63 @@
+# ClusterReport 配置文件
+# 文档: https://github.com/sunyifei83/ClusterReport
+
+# 集群定义
+clusters:
+  # 生产环境集群
+  - name: production
+    nodes:
+      - prod-node1.example.com
+      - prod-node2.example.com
+      - prod-node3.example.com
+    ssh_key: ~/.ssh/id_rsa
+    username: admin
+    port: 22
+    tags:
+      env: production
+      region: us-east-1
+
+  # 测试环境集群
+  - name: staging
+    nodes:
+      - staging-node1.example.com
+      - staging-node2.example.com
+    ssh_key: ~/.ssh/staging_key
+    username: deploy
+    tags:
+      env: staging
+      region: us-west-1
+
+  # 开发环境（本地）
+  - name: development
+    nodes:
+      - localhost
+    tags:
+      env: development
+
+# 输出配置
+output:
+  # 报告输出目录
+  directory: ./reports
+  
+  # 支持的输出格式: html, json, markdown, yaml
+  formats:
+    - html
+    - json
+    - markdown
+
+# 收集器配置
+collector:
+  # 并发收集的节点数
+  parallel: 10
+  
+  # 收集超时时间
+  timeout: 5m
+  
+  # 失败重试次数
+  retry: 3
+
+# SSH 全局配置（可选，会被集群配置覆盖）
+ssh:
+  default_key: ~/.ssh/id_rsa
+  default_user: root
+  default_port: 22
