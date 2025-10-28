@@ -42,6 +42,12 @@ npm-debug.log*
 *.so
 *.dylib
 vendor/
+# Build artifacts
+clusterreport
+nodeprobe
+perfsnap
+*.test
+*.out
 
 #Terraform
 *.tfstate
@@ -55,5 +61,14 @@ vendor/
 tmp/
 temp/
 .tmp/
+
+# Archive (moved to docs/archive/)
 PROJECT_AUDIT_REPORT.md
 PROJECT_COMPREHENSIVE_REVIEW.md
+TOOLS_INTEGRATION_ANALYSIS.md
+TOOLS_INTEGRATION_STATUS.md
+
+# Coverage
+*.cover
+coverage.txt
+coverage.html

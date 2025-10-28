@@ -1,0 +1,182 @@
+---
+# Ansible Playbook: Web Server Setup
+# 用于快速部署和配置 Web 服务器（Nginx + SSL + 防火墙）
+
+- name: Web Server Setup
+  hosts: webservers
+  become: yes
+  vars:
+    nginx_version: "1.24"
+    domain_name: "example.com"
+    admin_email: "admin@example.com"
+    enable_ssl: true
+    enable_firewall: true
+    
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Install required packages
+      apt:
+        name:
+          - nginx
+          - certbot
+          - python3-certbot-nginx
+          - ufw
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Install required packages (RedHat/CentOS)
+      yum:
+        name:
+          - nginx
+          - certbot
+          - python3-certbot-nginx
+          - firewalld
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Create web root directory
+      file:
+        path: "/var/www/{{ domain_name }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: Deploy index.html
+      copy:
+        dest: "/var/www/{{ domain_name }}/index.html"
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Welcome to {{ domain_name }}</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 50px; }
+                  h1 { color: #333; }
+              </style>
+          </head>
+          <body>
+              <h1>Welcome to {{ domain_name }}</h1>
+              <p>Server is running successfully!</p>
+          </body>
+          </html>
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: Configure Nginx virtual host
+      template:
+        src: templates/nginx-vhost.j2
+        dest: "/etc/nginx/sites-available/{{ domain_name }}"
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Reload Nginx
+
+    - name: Enable Nginx site
+      file:
+        src: "/etc/nginx/sites-available/{{ domain_name }}"
+        dest: "/etc/nginx/sites-enabled/{{ domain_name }}"
+        state: link
+      notify: Reload Nginx
+
+    - name: Remove default Nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload Nginx
+
+    - name: Test Nginx configuration
+      command: nginx -t
+      register: nginx_test
+      changed_when: false
+
+    - name: Start and enable Nginx
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Configure firewall (UFW - Debian/Ubuntu)
+      block:
+        - name: Allow SSH
+          ufw:
+            rule: allow
+            port: '22'
+            proto: tcp
+
+        - name: Allow HTTP
+          ufw:
+            rule: allow
+            port: '80'
+            proto: tcp
+
+        - name: Allow HTTPS
+          ufw:
+            rule: allow
+            port: '443'
+            proto: tcp
+
+        - name: Enable UFW
+          ufw:
+            state: enabled
+      when: enable_firewall and ansible_os_family == "Debian"
+
+    - name: Configure firewall (firewalld - RedHat/CentOS)
+      block:
+        - name: Allow HTTP
+          firewalld:
+            service: http
+            permanent: yes
+            state: enabled
+
+        - name: Allow HTTPS
+          firewalld:
+            service: https
+            permanent: yes
+            state: enabled
+
+        - name: Reload firewalld
+          systemd:
+            name: firewalld
+            state: reloaded
+      when: enable_firewall and ansible_os_family == "RedHat"
+
+    - name: Obtain SSL certificate with Let's Encrypt
+      command: >
+        certbot --nginx
+        --non-interactive
+        --agree-tos
+        --email {{ admin_email }}
+        --domains {{ domain_name }}
+      when: enable_ssl
+      register: certbot_result
+      failed_when: certbot_result.rc != 0 and 'already exists' not in certbot_result.stderr
+
+    - name: Setup SSL renewal cron job
+      cron:
+        name: "Renew Let's Encrypt certificates"
+        minute: "0"
+        hour: "3"
+        job: "certbot renew --quiet"
+      when: enable_ssl
+
+    - name: Display server information
+      debug:
+        msg:
+          - "Web server setup completed successfully!"
+          - "Domain: {{ domain_name }}"
+          - "Document root: /var/www/{{ domain_name }}"
+          - "SSL enabled: {{ enable_ssl }}"
+          - "Access your site at: http://{{ domain_name }}"
+
+  handlers:
+    - name: Reload Nginx
+      systemd:
+        name: nginx
+        state: reloaded
